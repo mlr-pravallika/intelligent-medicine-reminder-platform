@@ -97,8 +97,6 @@ cd backend
 venv\Scripts\activate
 uvicorn app.main:app --reload
 
-## Open Swagger API documentation in your browser:
-
 http://127.0.0.1:8000/docs
 
 ## Frontend
@@ -109,8 +107,6 @@ Open a new terminal in the project root folder and run:
 cd frontend
 npm install
 npm run dev
-
-Open the frontend application in your browser:
 
 http://localhost:5173/
 
@@ -129,7 +125,7 @@ Paste the token and click Authorize.
 
 Test protected endpoints such as GET /dashboard.
 
-Future Enhancements
+### Future Enhancements
 
 Medicine management module
 
