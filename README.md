@@ -142,3 +142,12 @@ Deployment to a cloud platform
 
 Lalitha Raga Pravallika
 B.Tech, Electronics and Communication Engineering
+
+
+### Milestone 1 Completion
+
+- Project scope, database schema, workflow documentation, and UI wireframes created.
+- FastAPI backend environment configured.
+- User registration and JWT login implemented.
+- Protected dashboard endpoint tested successfully.
+- Role-based admin endpoint and profile update endpoint added.
