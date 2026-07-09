@@ -2,6 +2,9 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+from jose import jwt, JWTError
+from .auth import SECRET_KEY, ALGORITHM
+
 from .database import Base, engine, get_db
 from .models import User
 from .schemas import UserRegister, UserLogin, ProfileUpdate, UserResponse
@@ -121,3 +124,34 @@ def update_profile(
     db.refresh(user)
 
     return user
+
+@app.get("/admin/users", tags=["Admin"])
+def admin_only_dashboard(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_role = payload.get("role")
+
+        if user_role != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied. Admin role required."
+            )
+
+        return {
+            "message": "Welcome to the admin dashboard"
+        }
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )

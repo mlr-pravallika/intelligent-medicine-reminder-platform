@@ -21,25 +21,21 @@ Completed features:
 - Added user profile update API
 - Configured API testing through Swagger UI
 
-## Tech Stack
+## Technology Stack
 
-### Frontend
-- HTML
-- CSS
-- JavaScript
-- Vite
+- **Backend:** FastAPI (Python)
 
-### Backend
-- Python
-- FastAPI
-- SQLAlchemy
-- Pydantic
-- JWT Authentication
-- Uvicorn
+- **API Documentation & Testing:** Swagger UI / OpenAPI
 
-### Database
-- PostgreSQL
-- SQLAlchemy ORM
+- **Authentication:** JWT Bearer Token 
+Authentication
+
+- **Database:** PostgreSQL with SQLAlchemy
+
+- **Frontend:** HTML, CSS, JavaScript
+
+- **Version Control:** Git and GitHub
+
 
 ## Local Development Links
 
