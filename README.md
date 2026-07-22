@@ -22,77 +22,128 @@ This milestone focuses on building the core backend services, reminder automatio
 
 # 🔐 User Authentication
 
-User Registration
-User Login
-JWT Authentication
-Protected Routes
-Secure Password Hashing (bcrypt)
-Logout Functionality
+• User Registration
+
+•  User Login
+
+•  JWT Authentication
+
+•  Protected Routes
+
+•  Secure Password Hashing (bcrypt)
+
+•  Logout Functionality
 
 # 💊 Medicine Management
 
 Add Medicine
+
 View Medicines
+
 Edit Medicine
+
 Delete Medicine
+
 Search Medicines
+
 Pause / Resume Medicines
 
 # ⏰ Reminder Scheduling
 
 APScheduler Integration
+
 Automatic Reminder Checking
+
 Email Reminder Service
+
 SMS Reminder Service
+
 Reminder Status Tracking
+
 Graceful Error Handling for Failed Notifications
 
 # 📊 Dashboard
 
 Total Medicines
+
 Active Medicines
+
 Today's Reminder Count
+
 Expiring Soon Medicines
+
 Dynamic Dashboard Statistics
 
 # 🎨 Frontend
 
 Responsive Dashboard
+
 Sidebar Navigation
+
 Professional UI
+
 Dashboard Cards
+
 Search Functionality
+
 Medicine Status Indicators
+
 🗄 Database
+
 PostgreSQL Database
+
 SQLAlchemy ORM
+
 User Table
+
 Medicine Table
+
 Reminder History Table
-🛠 Backend
+
+# 🛠 Backend
+
 FastAPI REST APIs
+
 Scheduler Startup Integration
+
 JWT Authorization
+
 Exception Handling
+
 API-based Architecture
 
 # 🧰 Technology Stack
 
 Frontend
+
 React.js
+
 Vite
+
 Tailwind CSS
+
 Axios
+
 Backend
+
 FastAPI
+
 SQLAlchemy
+
 APScheduler
+
 JWT Authentication
+
 Bcrypt
+
 Database
+
 PostgreSQL
+
 Notification Services
+
 Gmail SMTP (Email)
+
 SMS API Integration
 
 # 📂 Current Project Status
@@ -113,34 +164,57 @@ SMS API Integration
 
 # 📂 Project Structure
 
-```
 medicine-reminder-platform/
 
 │
 ├── backend/
-│ ├── app/
-│ ├── models.py
-│ ├── main.py
-│ ├── scheduler.py
-│ ├── email_service.py
-│ ├── sms_service.py
-│ └── database.py
+│   ├── app/
+│   │   ├── auth.py
+│   │   ├── database.py
+│   │   ├── email_service.py
+│   │   ├── main.py
+│   │   ├── models.py
+│   │   ├── scheduler.py
+│   │   ├── schemas.py
+│   │   ├── sms_service.py
+│   │   └── __init__.py
+│   │
+│   ├── requirements.txt
+│   └── .env
 │
 ├── frontend/
-│ ├── src/
-│ │ ├── components/
-│ │ ├── pages/
-│ │ ├── services/
-│ │ ├── routes/
-│ │ ├── assets/
-│ │ └── styles/
+│   ├── public/
+│   │   └── favicon.png
+│   │
+│   ├── src/
+│   │   ├── assets/
+│   │   │   └── logo.png
+│   │   │
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── routes/
+│   │   ├── styles/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   │
+│   ├── screenshots/
+│   │   ├── login.png
+│   │   ├── dashboard.png
+│   │   ├── medicines.png
+│   │   ├── history.png
+│   │   └── profile.png
+│   │
+│   ├── package.json
+│   └── vite.config.js
 │
 ├── docs/
 │
 ├── README.md
 │
-└── requirements.txt
-```
+├── .gitignore
+│
+└── LICENSE
 
 # ⚙ Installation
 
@@ -200,8 +274,11 @@ The following features are planned for future milestones and are not yet impleme
 Dedicated page showing:
 
 - Missed Medicines
+
 - Completed Medicines
+
 - Reminder Timeline
+
 - Medicine Adherence
 
 ---
@@ -209,8 +286,11 @@ Dedicated page showing:
 ### 📊 Analytics Dashboard
 
 - Weekly Reports
+
 - Monthly Reports
+
 - Adherence Percentage
+
 - Missed Medicine Charts
 
 ---
@@ -238,9 +318,13 @@ Support for multiple languages.
 ## ✅ Milestone 1
 
 - Authentication
+
 - Medicine CRUD
+
 - Dashboard
+
 - PostgreSQL Integration
+
 - FastAPI APIs
 
 ---
@@ -248,12 +332,19 @@ Support for multiple languages.
 ## ✅ Milestone 2
 
 - APScheduler
+
 - Email Notifications
+
 - SMS Notifications
+
 - Reminder History Database
+
 - Dashboard Statistics
+
 - Search Medicines
+
 - Pause/Resume Medicines
+
 - Improved UI
 
 ---
@@ -261,10 +352,15 @@ Support for multiple languages.
 ## 🚀 Upcoming Milestone
 
 - Push Notifications
+
 - Medication History Tracking UI
+
 - Analytics Dashboard
+
 - Reminder Reports
+
 - Mobile App
+
 
 # 📸 Screenshots
 
