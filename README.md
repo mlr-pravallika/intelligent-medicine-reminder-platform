@@ -1,81 +1,340 @@
-# Intelligent Medicine Reminder Platform
+🚀 MediCare AI – Milestone 2
 
-A full-stack healthcare workflow application designed to help users manage medicine reminders, user profiles, and secure account access.
+# 💊 MediCare AI – Intelligent Medication Reminder Platform
 
-## Project Overview
+<div align="center">
 
-The Intelligent Medicine Reminder Platform provides a foundation for patients to securely register, log in, manage their profile, and access protected dashboard features. The project is being developed milestone by milestone with a structured frontend, backend, database design, and API documentation workflow.
+![React](https://img.shields.io/badge/React-19-blue?logo=react)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green?logo=fastapi)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue?logo=postgresql)
+![JWT](https://img.shields.io/badge/JWT-Authentication-orange)
+![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-Styling-38BDF8?logo=tailwindcss)
+![Python](https://img.shields.io/badge/Python-3.13-yellow?logo=python)
+![License](https://img.shields.io/badge/Status-Milestone%202-success)
 
-## Milestone 1: Requirements, Database Design and Core Setup
+# 📌 Project Overview
 
-Completed features:
+**MediCare AI** is an Intelligent Medication Reminder Platform that helps users manage their daily medications through secure authentication, medicine management, automated reminder scheduling, email notifications, SMS notifications, and a personalized dashboard.
 
-- Defined healthcare workflow and project scope
-- Designed database schema and system workflow documentation
-- Set up frontend and backend project environments
-- Implemented user registration
-- Implemented secure password hashing
-- Implemented user login with JWT authentication
-- Created protected dashboard API access
-- Added role field for role-based access foundation
-- Added user profile update API
-- Configured API testing through Swagger UI
+This milestone focuses on building the core backend services, reminder automation, and user-facing medicine management features.
 
-## Technology Stack
+✅ Milestone 2 Features Completed
 
-- **Backend:** FastAPI (Python)
+# 🔐 User Authentication
 
-- **API Documentation & Testing:** Swagger UI / OpenAPI
+• User Registration
 
-- **Authentication:** JWT Bearer Token Authentication
+•  User Login
 
-- **Database:** PostgreSQL with SQLAlchemy
+•  JWT Authentication
 
-- **Frontend:** HTML, CSS, JavaScript
+•  Protected Routes
 
-- **Version Control:** Git and GitHub
+•  Secure Password Hashing (bcrypt)
 
-## Local Development Links
+•  Logout Functionality
 
-These links work only when the project servers are running locally.
+# 💊 Medicine Management
 
-| Service                   | URL                       | Purpose                                       |
-|---                        |---                        |---                                            |
-| Frontend Application      | http://localhost:5173/    | Opens the frontend user interface             |
-| Backend API Documentation | http://127.0.0.1:8000/docs| Opens Swagger UI for testing API endpoints    |
-| Backend API Home          | http://127.0.0.1:8000/    | Checks whether the FastAPI backend is running |
+Add Medicine
 
-## API Endpoints
+View Medicines
 
-| Method     | Endpoint             | Description                                              |
-|---         |---                   |---                                                       |
-| `POST`     | `/register`          | Registers a new user                                     |
-| `POST`     | `/login`             | Authenticates a user and returns a JWT access token      |
-| `GET`      | `/dashboard`         | Protected dashboard endpoint requiring JWT authentication |
-| `PUT`      | `/profile/{user_id}` | Updates a user's profile details                          |
+Edit Medicine
 
-## Project Structure
+Delete Medicine
 
-```text
-medicine-reminder-platform/
-│
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   ├── database.py
-│   │   └── auth.py
-│   ├── requirements.txt
-│   └── venv/
-│
-├── frontend/
-│   └── dashboard.html
-│
-├── docs/
-│   ├── database-schema.md
-│   ├── wireframes.md
-│   └── workflow.md
-│
-├── .gitignore
-└── README.md
+Search Medicines
+
+Pause / Resume Medicines
+
+# ⏰ Reminder Scheduling
+
+APScheduler Integration
+
+Automatic Reminder Checking
+
+Email Reminder Service
+
+SMS Reminder Service
+
+Reminder Status Tracking
+
+Graceful Error Handling for Failed Notifications
+
+# 📊 Dashboard
+
+Total Medicines
+
+Active Medicines
+
+Today's Reminder Count
+
+Expiring Soon Medicines
+
+Dynamic Dashboard Statistics
+
+# 🎨 Frontend
+
+Responsive Dashboard
+
+Sidebar Navigation
+
+Professional UI
+
+Dashboard Cards
+
+Search Functionality
+
+Medicine Status Indicators
+
+# 🗄 Database
+
+PostgreSQL Database
+
+SQLAlchemy ORM
+
+User Table
+
+Medicine Table
+
+Reminder History Table
+
+# 🛠 Backend
+
+FastAPI REST APIs
+
+Scheduler Startup Integration
+
+JWT Authorization
+
+Exception Handling
+
+API-based Architecture
+
+# 🧰 Technology Stack
+
+Frontend
+
+React.js
+
+Vite
+
+Tailwind CSS
+
+Axios
+
+Backend
+
+FastAPI
+
+SQLAlchemy
+
+APScheduler
+
+JWT Authentication
+
+Bcrypt
+
+Database
+
+PostgreSQL
+
+Notification Services
+
+Gmail SMTP (Email)
+
+SMS API Integration
+
+# ⚙ Installation
+
+## Clone Repository
+
+```bash
+git clone https://github.com/yourusername/medicine-reminder-platform.git
+```
+
+---
+
+## Backend Setup
+
+```bash
+cd backend
+
+python -m venv venv
+
+venv\Scripts\activate
+
+pip install -r requirements.txt
+
+uvicorn app.main:app --reload
+```
+
+Backend runs at
+
+```
+http://127.0.0.1:8000
+```
+
+---
+
+## Frontend Setup
+
+```bash
+cd frontend
+
+npm install
+
+npm run dev
+```
+
+Frontend runs at
+
+```
+http://localhost:5173
+```
+
+
+🚧 Planned Future Enhancements
+
+The following features are planned for future milestones and are not yet implemented:
+
+### 📜 Medication History Tracking UI
+
+Dedicated page showing:
+
+- Missed Medicines
+
+- Completed Medicines
+
+- Reminder Timeline
+
+- Medicine Adherence
+
+---
+
+### 📊 Analytics Dashboard
+
+- Weekly Reports
+
+- Monthly Reports
+
+- Adherence Percentage
+
+- Missed Medicine Charts
+
+---
+
+### 👨‍👩‍👧 Caregiver Notifications
+
+Notify family members when important medicines are missed.
+
+---
+
+### 📱 Mobile Application
+
+Android/iOS application using React Native.
+
+---
+
+### 🌍 Multi-language Support
+
+Support for multiple languages.
+
+---
+
+# 🎯 Milestone Progress
+
+## ✅ Milestone 1
+
+- Authentication
+
+- Medicine CRUD
+
+- Dashboard
+
+- PostgreSQL Integration
+
+- FastAPI APIs
+
+---
+
+## ✅ Milestone 2
+
+- APScheduler
+
+- Email Notifications
+
+- SMS Notifications
+
+- Reminder History Database
+
+- Dashboard Statistics
+
+- Search Medicines
+
+- Pause/Resume Medicines
+
+- Improved UI
+
+---
+
+## 🚀 Upcoming Milestone
+
+- Push Notifications
+
+- Medication History Tracking UI
+
+- Analytics Dashboard
+
+- Reminder Reports
+
+- Mobile App
+
+
+# 📸 Screenshots
+
+## Dashboard
+
+![alt text](Dashboard.png)
+
+## Login
+
+![alt text](login.png)
+
+## Register
+
+![alt text](register.png)
+
+## Medicine Page
+
+![alt text](<medicine page.png>)
+
+## Edit Medicine
+
+![alt text](<edit medicine-1.png>)
+
+## Reminder History
+
+![alt text](ReminderHistory.png)
+
+## Profile Page
+
+![alt text](<Profile Page.png>)
+
+
+# 🎯 Milestone 2 Outcome
+
+This milestone successfully delivers the core functionality of an Intelligent Medication Reminder Platform with secure authentication, medicine management, automated scheduling, email notifications, SMS notifications, and a responsive dashboard.
+
+The platform is designed with a modular architecture, making it easy to extend with advanced reminder tracking, push notifications, analytics, and reporting in future milestones.
+
+# 📝 Note
+
+Medication History Tracking (UI) and Browser Push Notifications are intentionally listed as future enhancements because they have not yet been implemented. The current version focuses on delivering a stable and fully functional medication reminder platform with email and SMS reminder services.
+
+# 👩‍💻 Developed By
+
+**Marri Lalitha Raga Pravallika**
+
+Electronics & Communication Engineering Student
