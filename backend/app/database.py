@@ -5,6 +5,7 @@ DATABASE_URL = "postgresql://medicine_user:medicine123@localhost:5432/medicine_r
 
 engine = create_engine(DATABASE_URL)
 
+
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
