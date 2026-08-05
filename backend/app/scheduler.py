@@ -26,11 +26,14 @@ def check_medicines():
 
         print(f"Found {len(medicines)} medicines")
 
-        current_time = datetime.now().strftime("%I:%M %p")
-
+        current_time = datetime.now().strftime("%H:%M")
         print("Current Time:", current_time)
 
         for medicine in medicines:
+            print(repr(medicine.reminder_time))
+
+            if current_time == medicine.reminder_time:
+                print("✅ Time Matched")
 
             print(
                 medicine.medicine_name,
@@ -48,10 +51,49 @@ def check_medicines():
                 "| Active:",
                 medicine.is_active
             )
+            existing = (
+                db.query(ReminderHistory)
+                .filter(
+                    ReminderHistory.user_id == medicine.user.id,
+                    ReminderHistory.medicine_name == medicine.medicine_name,
+                    ReminderHistory.reminder_time == medicine.reminder_time,
+                )
+                .order_by(ReminderHistory.sent_at.desc())
+                .first()
+            )
+
+            if existing:
+                continue
 
             if current_time.strip() == medicine.reminder_time.strip():
 
+                status = "Sent"
+
+                # ----------------------------------
+                # Reduce remaining stock
+                # ----------------------------------
+
+                if medicine.remaining_quantity is None:
+                    medicine.remaining_quantity = medicine.total_quantity
+
+                if medicine.tablets_per_day is None:
+                    medicine.tablets_per_day = 1
+
+                medicine.remaining_quantity -= medicine.tablets_per_day
+
+                if medicine.remaining_quantity < 0:
+                    medicine.remaining_quantity = 0
+
+                db.commit()
+
+                print(
+                    f"{medicine.medicine_name} Remaining: "
+                    f"{medicine.remaining_quantity}"
+                )
+
                 print("✅ Time Matched")
+
+                print(repr(medicine.reminder_time))
 
                 print("=" * 50)
                 print("🔔 REMINDER")
@@ -94,6 +136,10 @@ def check_medicines():
 
                 db.add(history)
                 db.commit()
+                db.refresh(history)
+
+                print("✅ History Saved")
+                print("History ID:", history.id)
 
     finally:
 

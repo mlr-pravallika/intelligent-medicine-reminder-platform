@@ -1,8 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from datetime import date
-
+from datetime import date, timedelta
+from app.routes import ocr, assistant, refill
+from datetime import datetime
+from .import crud
+from app.ai_service import ask_ai
+from app.schemas import AssistantRequest
 from .database import Base, engine, get_db
 from .models import User
 from .schemas import (
@@ -14,7 +18,14 @@ from .schemas import (
     MedicineUpdate,
     MedicineResponse,
     ReminderHistoryResponse
+    ,
+    GoogleLogin
 )
+from app.google_auth import verify_google_token
+from app.routes import calendar
+from app.routes import reminder
+from app.routes import notifications
+from app.routes import analytics
 from .auth import (
     hash_password,
     verify_password,
@@ -27,14 +38,44 @@ from .models import Medicine, ReminderHistory
 from . import scheduler
 from .schemas import MedicineCreate, MedicineResponse
 from .auth import get_current_user
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from app.schemas import GoogleLogin
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter
+
+from app.google_auth import verify_google_token
+
+from app.auth import create_access_token
+
+from app.models import User
+
+from app.routes import ocr
+
+from app.database import get_db
+
+from sqlalchemy.orm import Session
+
+from fastapi import Depends
+
+from app.ai_service import ask_ai
+from .schemas import ChatRequest
 
 app = FastAPI(
     title="MediCare AI API",
     description="AI-Powered Intelligent Medication Management Platform",
     version="1.0.0"
 )
+
+app.include_router(ocr.router)
+app.include_router(assistant.router)
+app.include_router(refill.router)
+app.include_router(calendar.router)
+app.include_router(notifications.router)
+app.include_router(analytics.router)
+app.include_router(ocr.router)
+app.include_router(reminder.router)
 
 @app.on_event("startup")
 def startup_event():
@@ -45,6 +86,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -102,8 +145,12 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password"
         )
 
+    print("=" * 50)
     print("Entered Password :", user.password)
+    print("Password Length :", len(user.password))
     print("Stored Hash :", db_user.password_hash)
+    print("Hash Length :", len(db_user.password_hash))
+    print("=" * 50)
 
     result = verify_password(
         user.password,
@@ -130,11 +177,39 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         "token_type": "bearer"
     }
 
-@app.get("/me", tags=["Authentication"])
+@app.get("/me")
 def get_profile(
     current_user: User = Depends(get_current_user)
 ):
-    return current_user
+    return {
+        "id": current_user.id,
+
+        "name": current_user.name,
+
+        "email": current_user.email,
+
+        "phone": current_user.phone,
+
+        "role": current_user.role,
+
+        "dob": current_user.dob,
+
+        "gender": current_user.gender,
+
+        "blood_group": current_user.blood_group,
+
+        "height": current_user.height,
+
+        "weight": current_user.weight,
+
+        "allergies": current_user.allergies,
+
+        "medical_conditions": current_user.medical_conditions,
+
+        "preferred_language": current_user.preferred_language,
+
+        "address": current_user.address,
+    }
 
 
 @app.get("/dashboard", tags=["Dashboard"])
@@ -174,6 +249,33 @@ def update_profile(
 
     if profile.phone is not None:
         user.phone = profile.phone
+
+    if profile.dob is not None:
+        user.dob = profile.dob
+
+    if profile.gender is not None:
+        user.gender = profile.gender
+
+    if profile.blood_group is not None:
+        user.blood_group = profile.blood_group
+
+    if profile.height is not None:
+        user.height = profile.height
+
+    if profile.weight is not None:
+        user.weight = profile.weight
+
+    if profile.allergies is not None:
+        user.allergies = profile.allergies
+
+    if profile.medical_conditions is not None:
+        user.medical_conditions = profile.medical_conditions
+
+    if profile.preferred_language is not None:
+        user.preferred_language = profile.preferred_language
+
+    if profile.address is not None:
+        user.address = profile.address    
 
     db.commit()
     db.refresh(user)
@@ -320,6 +422,22 @@ def toggle_medicine_status(
 
     return medicine
 
+@app.get("/calendar")
+def calendar_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    medicines = (
+        db.query(Medicine)
+        .filter(
+            Medicine.user_id == current_user.id,
+            Medicine.is_active == True
+        )
+        .all()
+    )
+
+    return medicines    
+
 @app.delete(
     "/medicines/{medicine_id}",
     tags=["Medicine"]
@@ -371,18 +489,65 @@ def get_dashboard_stats(
             if m.is_active
         ])
 
-        today_reminders = db.query(
-            ReminderHistory
-        ).filter(
-            ReminderHistory.user_id == current_user.id
-        ).count()
+        today_reminders = 0
+
+        for medicine in medicines:
+
+            frequency = (medicine.frequency or "").lower()
+
+            if "1-0-1" in frequency:
+                today_reminders += 2
+
+            elif "1-1-1" in frequency:
+                today_reminders += 3
+
+            elif "0-0-1" in frequency:
+                today_reminders += 1
+
+            elif "twice" in frequency:
+                today_reminders += 2
+
+            elif "three" in frequency:
+                today_reminders += 3
+
+            else:
+                today_reminders += 1
+
+        expiring_soon = 0
+
+        for m in medicines:
+
+            if m.end_date:
+
+                try:
+                    end_date = datetime.strptime(
+                        m.end_date,
+                        "%Y-%m-%d"
+                    ).date()
+
+                    if date.today() <= end_date <= date.today() + timedelta(days=7):
+                        expiring_soon += 1
+
+                except ValueError:
+                    pass
+
+        refill = crud.get_refill_count(
+            db,
+            current_user.id
+        )
 
         return {
+
             "total_medicines": total_medicines,
+
             "active_medicines": active_medicines,
+
             "today_reminders": today_reminders,
-            "expiring_soon": 0
-        }
+
+            "expiring_soon": expiring_soon,
+
+            "refill_soon": refill
+        }  
 
     except Exception as e:
 
@@ -392,6 +557,140 @@ def get_dashboard_stats(
             status_code=500,
             detail=str(e)
         )
+
+@app.get("/dashboard/today-medicines")
+def get_today_medicines(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    medicines = (
+        db.query(Medicine)
+        .filter(
+            Medicine.user_id == current_user.id,
+            Medicine.is_active == True
+        )
+        .all()
+    )
+
+    return medicines
+
+@app.get("/dashboard/notifications")
+def dashboard_notifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    notifications = crud.get_notifications(
+        db,
+        current_user.id
+    )
+
+    return notifications
+
+@app.get("/dashboard/weekly")
+def dashboard_weekly(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    history = (
+        db.query(ReminderHistory)
+        .filter(
+            ReminderHistory.user_id == current_user.id
+        )
+        .all()
+    )
+
+    taken = len([
+        h for h in history
+        if h.status == "Taken"
+    ])
+
+    missed = len([
+        h for h in history
+        if h.status == "Missed"
+    ])
+
+    return [
+
+        {
+
+            "label": "This Week",
+
+            "taken": taken,
+
+            "missed": missed
+
+        }
+
+    ]
+
+@app.get("/dashboard/monthly")
+def dashboard_monthly(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    history = (
+        db.query(ReminderHistory)
+        .filter(
+            ReminderHistory.user_id == current_user.id
+        )
+        .all()
+    )
+
+    taken = len([
+        h for h in history
+        if h.status == "Taken"
+    ])
+
+    missed = len([
+        h for h in history
+        if h.status == "Missed"
+    ])
+
+    total = taken + missed
+
+    adherence = 0
+
+    if total > 0:
+
+        adherence = round((taken / total) * 100)
+
+    return [
+
+        {
+
+            "label": "This Month",
+
+            "adherence": adherence
+
+        }
+
+    ]
+
+@app.get("/dashboard/activity")
+def dashboard_activity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    history = (
+        db.query(ReminderHistory)
+        .filter(
+            ReminderHistory.user_id == current_user.id
+        )
+        .order_by(
+            ReminderHistory.id.desc()
+        )
+        .limit(10)
+        .all()
+    )
+
+    return history
+
+
     
 @app.get("/test-email", tags=["Testing"])
 def test_email():
@@ -435,6 +734,87 @@ def get_history(db: Session = Depends(get_db),
 
     return history
 
+@app.post("/assistant/chat")
+def assistant_chat(
+    request: AssistantRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
 
-from datetime import datetime
+    medicines = (
+        db.query(Medicine)
+        .filter(
+            Medicine.user_id == current_user.id
+        )
+        .all()
+    )
 
+    answer = ask_ai(
+        request.question,
+        medicines
+    )
+
+    return {
+        "answer": answer
+    }
+
+
+@app.post("/auth/google")
+def google_login(
+    request: GoogleLogin,
+    db: Session = Depends(get_db)
+):
+
+    google_user = verify_google_token(
+        request.credential
+    )
+
+    email = google_user["email"]
+
+    name = google_user.get("name", "Google User")
+
+    user = db.query(User).filter(
+        User.email == email
+    ).first()
+
+    if user is None:
+
+        user = User(
+
+            name=name,
+
+            email=email,
+
+            role="patient",
+
+            phone="",
+
+            password_hash="GOOGLE_LOGIN"
+
+        )
+
+        db.add(user)
+
+        db.commit()
+
+        db.refresh(user)
+
+    token = create_access_token(
+
+        {
+
+            "sub": str(user.id),
+
+            "role": user.role
+
+        }
+
+    )
+
+    return {
+
+        "access_token": token,
+
+        "token_type": "bearer"
+
+    }
