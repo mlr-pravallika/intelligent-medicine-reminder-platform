@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import uuid
+from pydantic import BaseModel
 
 from jose import jwt, JWTError
 
@@ -120,3 +121,6 @@ def get_current_user(
         )
 
     return user
+
+class GoogleLogin(BaseModel):
+    credential: str

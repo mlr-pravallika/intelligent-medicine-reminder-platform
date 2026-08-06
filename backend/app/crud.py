@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-
+from datetime import datetime
 from . import models, schemas
 
 
@@ -20,6 +20,11 @@ def create_medicine(
         start_date=medicine.start_date,
         end_date=medicine.end_date,
         instructions=medicine.instructions,
+
+        # Refill Prediction Fields
+        total_quantity=medicine.total_quantity,
+        remaining_quantity=medicine.remaining_quantity,
+        tablets_per_day=medicine.tablets_per_day,
     )
 
     db.add(db_medicine)
@@ -90,6 +95,13 @@ def update_medicine(
     db_medicine.instructions = medicine.instructions
     db_medicine.is_active = medicine.is_active
 
+    # -----------------------------
+    # Refill Prediction Fields
+    # -----------------------------
+    db_medicine.total_quantity = medicine.total_quantity
+    db_medicine.remaining_quantity = medicine.remaining_quantity
+    db_medicine.tablets_per_day = medicine.tablets_per_day
+
     db.commit()
     db.refresh(db_medicine)
 
@@ -108,7 +120,7 @@ def delete_medicine(
     db_medicine = get_medicine(
         db,
         medicine_id,
-        user_id
+        user_id,
     )
 
     if not db_medicine:
@@ -118,3 +130,90 @@ def delete_medicine(
     db.commit()
 
     return True
+
+def get_refill_count(db, user_id):
+
+    medicines = (
+        db.query(models.Medicine)
+        .filter(models.Medicine.user_id == user_id)
+        .all()
+    )
+
+    count = 0
+
+    for medicine in medicines:
+
+        if medicine.remaining_quantity <= 5:
+
+            count += 1
+
+    return count
+
+# -----------------------------
+# Notifications
+# -----------------------------
+
+def get_notifications(
+    db: Session,
+    user_id: int
+):
+
+    return (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.user_id == user_id
+        )
+        .order_by(
+            models.Notification.created_at.desc()
+        )
+        .all()
+    )
+
+
+def mark_notification_read(
+    db: Session,
+    notification_id: int,
+    user_id: int
+):
+
+    notification = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.id == notification_id,
+            models.Notification.user_id == user_id
+        )
+        .first()
+    )
+
+    if notification:
+
+        notification.is_read = True
+
+        db.commit()
+
+        db.refresh(notification)
+
+    return notification
+
+
+def mark_all_notifications_read(
+    db: Session,
+    user_id: int
+):
+    notifications = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.user_id == user_id,
+            models.Notification.is_read == False
+        )
+        .all()
+    )
+
+    for notification in notifications:
+        notification.is_read = True
+
+    db.commit()
+
+    return {
+        "message": "All notifications marked as read"
+    }
