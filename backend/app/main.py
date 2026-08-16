@@ -7,6 +7,8 @@ from .import crud
 from app.ai_service import ask_ai
 from app.schemas import AssistantRequest
 from .models import User, PasswordResetCode
+from app.database import engine, Base
+from app import models
 from .schemas import (
     UserRegister,
     UserLogin,
@@ -133,9 +135,12 @@ def validate_new_password(password: str):
             detail="Password must contain at least one special character"
         )
 
+    
+
 @app.on_event("startup")
 def startup_event():
     scheduler.start_scheduler()
+    Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
