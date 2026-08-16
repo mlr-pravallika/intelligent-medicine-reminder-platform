@@ -1,17 +1,26 @@
 import axios from "axios";
 
+
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8000";
+
+
 const api = axios.create({
-  baseURL: "http://localhost:8000",
+  baseURL: API_URL,
   timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
+
 api.interceptors.request.use(
   (config) => {
     const token =
-      localStorage.getItem("access_token");
+      localStorage.getItem(
+        "access_token",
+      );
 
     if (token) {
       config.headers =
@@ -25,12 +34,16 @@ api.interceptors.request.use(
   },
 
   (error) => {
-    return Promise.reject(error);
+    return Promise.reject(
+      error,
+    );
   },
 );
 
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) =>
+    response,
 
   (error) => {
     console.error(
@@ -40,8 +53,9 @@ api.interceptors.response.use(
 
     console.error(
       "Request URL:",
-      error.config?.baseURL +
-        error.config?.url,
+      `${error.config?.baseURL ?? ""}${
+        error.config?.url ?? ""
+      }`,
     );
 
     console.error(
@@ -54,8 +68,11 @@ api.interceptors.response.use(
       error.response?.data,
     );
 
-    return Promise.reject(error);
+    return Promise.reject(
+      error,
+    );
   },
 );
+
 
 export default api;
