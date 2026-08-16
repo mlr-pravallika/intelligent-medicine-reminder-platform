@@ -9,57 +9,110 @@ export interface MedicineData {
   start_date: string;
   end_date: string;
   instructions?: string;
-
   total_quantity: number;
   remaining_quantity: number;
   tablets_per_day: number;
+  low_stock_threshold: number;
+  is_active?: boolean;
 }
 
-export const addMedicine = async (data: MedicineData): Promise<Medicine> => {
-  const response = await api.post("/medicines", data);
+export interface MedicineNameValidationResponse {
+  valid: boolean;
+  available: boolean;
+  medicine_name: string;
+  message: string;
+  suggestion?: string | null;
+}
+
+export const addMedicine = async (
+  data: MedicineData,
+): Promise<Medicine> => {
+  const response = await api.post(
+    "/medicines",
+    data,
+  );
+
   return response.data;
 };
 
 export const getMedicines = async (): Promise<Medicine[]> => {
-  const response = await api.get("/medicines");
+  const response = await api.get(
+    "/medicines",
+  );
+
   return response.data;
 };
 
-export const getMedicine = async (id: number): Promise<Medicine> => {
-  const response = await api.get(`/medicines/${id}`);
+export const getMedicine = async (
+  id: number,
+): Promise<Medicine> => {
+  const response = await api.get(
+    `/medicines/${id}`,
+  );
+
   return response.data;
 };
 
 export const updateMedicine = async (
   id: number,
-  data: MedicineData
+  data: MedicineData,
 ): Promise<Medicine> => {
-  const response = await api.put(`/medicines/${id}`, data);
+  const response = await api.put(
+    `/medicines/${id}`,
+    data,
+  );
+
   return response.data;
 };
 
-export const toggleMedicine = async (id: number): Promise<Medicine> => {
-  const response = await api.patch(`/medicines/${id}/toggle`);
+export const toggleMedicine = async (
+  id: number,
+): Promise<Medicine> => {
+  const response = await api.patch(
+    `/medicines/${id}/toggle`,
+  );
+
   return response.data;
 };
 
-export const deleteMedicine = async (id: number): Promise<void> => {
-  await api.delete(`/medicines/${id}`);
+export const deleteMedicine = async (
+  id: number,
+): Promise<void> => {
+  await api.delete(
+    `/medicines/${id}`,
+  );
+};
+
+export const validateMedicineName = async (
+  medicine_name: string,
+): Promise<MedicineNameValidationResponse> => {
+  const response = await api.post(
+    "/medicines/validate-name",
+    {
+      medicine_name,
+    },
+  );
+
+  return response.data;
 };
 
 export const getDashboardStats = async () => {
-  const response = await api.get("/dashboard/stats");
+  const response = await api.get(
+    "/dashboard/stats",
+  );
+
   return response.data;
 };
 
-export const saveMedicines = async (medicines: any[]) => {
+export const saveMedicines = async (
+  medicines: unknown[],
+) => {
+  const response = await api.post(
+    "/ocr/save-prescription",
+    {
+      medicines,
+    },
+  );
 
-    const response = await api.post(
-        "/ocr/save-prescription",
-        {
-            medicines
-        }
-    );
-
-    return response.data;
+  return response.data;
 };

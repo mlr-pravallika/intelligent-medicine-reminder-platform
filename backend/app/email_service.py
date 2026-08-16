@@ -213,3 +213,235 @@ def send_email(
         print("EMAIL ERROR:")
         print(type(e).__name__)
         print(str(e))
+
+def send_verification_code_email(
+    receiver_email: str,
+    verification_code: str
+) -> bool:
+    """
+    Sends a password-reset verification code.
+    """
+
+    subject = "MediCare AI | Password Reset Verification Code"
+
+    html = f"""
+    <html>
+    <body style="
+        background:#f4f8fb;
+        font-family:Arial,sans-serif;
+        padding:30px;
+    ">
+
+    <div style="
+        max-width:600px;
+        margin:auto;
+        background:white;
+        border-radius:16px;
+        padding:35px;
+        box-shadow:0 10px 30px rgba(0,0,0,.08);
+    ">
+
+        <h1 style="color:#0077ff;">
+            💊 MediCare AI
+        </h1>
+
+        <p style="color:#666;">
+            Password Reset Verification
+        </p>
+
+        <hr>
+
+        <h2 style="color:#1f2937;">
+            Verification Code
+        </h2>
+
+        <p>
+            Use the verification code below to reset your password:
+        </p>
+
+        <div style="
+            margin:25px 0;
+            padding:20px;
+            text-align:center;
+            background:#eff6ff;
+            border-radius:12px;
+            border:1px solid #bfdbfe;
+        ">
+
+            <span style="
+                font-size:34px;
+                font-weight:bold;
+                letter-spacing:8px;
+                color:#2563eb;
+            ">
+                {verification_code}
+            </span>
+
+        </div>
+
+        <p>
+            This code will expire in <b>10 minutes</b>.
+        </p>
+
+        <p style="color:#dc2626;">
+            Do not share this code with anyone.
+        </p>
+
+        <hr>
+
+        <p style="color:#888;font-size:13px;">
+            If you did not request a password reset, you can safely ignore
+            this email.
+        </p>
+
+        <p style="color:#888;font-size:13px;">
+            MediCare AI — Intelligent Medication Management
+        </p>
+
+    </div>
+
+    </body>
+    </html>
+    """
+
+    message = MIMEMultipart()
+
+    message["From"] = f"MediCare AI <{EMAIL_ADDRESS}>"
+    message["To"] = receiver_email
+    message["Subject"] = subject
+
+    message.attach(
+        MIMEText(html, "html")
+    )
+
+    try:
+
+        server = smtplib.SMTP(
+            "smtp.gmail.com",
+            587
+        )
+
+        server.starttls()
+
+        server.login(
+            EMAIL_ADDRESS,
+            EMAIL_PASSWORD
+        )
+
+        server.sendmail(
+            EMAIL_ADDRESS,
+            receiver_email,
+            message.as_string()
+        )
+
+        server.quit()
+
+        print(
+            f"Password reset code sent to {receiver_email}"
+        )
+
+        return True
+
+    except Exception as e:
+
+        print("PASSWORD RESET EMAIL ERROR:")
+        print(type(e).__name__)
+        print(str(e))
+
+        return False
+
+
+def send_password_reset_success_email(
+    receiver_email: str
+) -> bool:
+    """
+    Sends a confirmation after a successful password reset.
+    """
+
+    subject = "MediCare AI | Password Changed Successfully"
+
+    html = f"""
+    <html>
+    <body style="
+        background:#f4f8fb;
+        font-family:Arial,sans-serif;
+        padding:30px;
+    ">
+
+    <div style="
+        max-width:600px;
+        margin:auto;
+        background:white;
+        border-radius:16px;
+        padding:35px;
+        box-shadow:0 10px 30px rgba(0,0,0,.08);
+    ">
+
+        <h1 style="color:#0077ff;">
+            💊 MediCare AI
+        </h1>
+
+        <h2>
+            Password changed successfully
+        </h2>
+
+        <p>
+            Your MediCare AI account password was successfully changed.
+        </p>
+
+        <p>
+            You can now sign in using your new password.
+        </p>
+
+        <p style="color:#dc2626;">
+            If you did not make this change, contact the administrator
+            immediately.
+        </p>
+
+    </div>
+
+    </body>
+    </html>
+    """
+
+    message = MIMEMultipart()
+
+    message["From"] = f"MediCare AI <{EMAIL_ADDRESS}>"
+    message["To"] = receiver_email
+    message["Subject"] = subject
+
+    message.attach(
+        MIMEText(html, "html")
+    )
+
+    try:
+
+        server = smtplib.SMTP(
+            "smtp.gmail.com",
+            587
+        )
+
+        server.starttls()
+
+        server.login(
+            EMAIL_ADDRESS,
+            EMAIL_PASSWORD
+        )
+
+        server.sendmail(
+            EMAIL_ADDRESS,
+            receiver_email,
+            message.as_string()
+        )
+
+        server.quit()
+
+        return True
+
+    except Exception as e:
+
+        print("PASSWORD RESET CONFIRMATION ERROR:")
+        print(type(e).__name__)
+        print(str(e))
+
+        return False        

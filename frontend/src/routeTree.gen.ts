@@ -15,13 +15,25 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CaregiverRouteImport } from './routes/caregiver'
 import { Route as PatientRouteImport } from './routes/patient'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as AuthForgotPasswordRouteImport } from './routes/auth.forgot-password'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
+import { Route as AdminAuditRouteImport } from './routes/admin.audit'
+import { Route as AdminNotificationsRouteImport } from './routes/admin.notifications'
+import { Route as AdminProfileRouteImport } from './routes/admin/profile'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminSystemRouteImport } from './routes/admin.system'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AuthForgotPasswordRouteImport } from './routes/auth/forgot-password'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthRegisterRouteImport } from './routes/auth.register'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
 import { Route as AuthVerifyEmailRouteImport } from './routes/auth.verify-email'
 import { Route as AuthVerifyOtpRouteImport } from './routes/auth.verify-otp'
 import { Route as CaregiverIndexRouteImport } from './routes/caregiver.index'
+import { Route as CaregiverAlertsRouteImport } from './routes/caregiver/alerts'
+import { Route as CaregiverPatientsRouteImport } from './routes/caregiver.patients'
+import { Route as CaregiverProfileRouteImport } from './routes/caregiver/profile'
+import { Route as CaregiverReportsRouteImport } from './routes/caregiver.reports'
+import { Route as CaregiverSettingsRouteImport } from './routes/caregiver/settings'
 import { Route as PatientIndexRouteImport } from './routes/patient.index'
 import { Route as PatientAnalyticsRouteImport } from './routes/patient.analytics'
 import { Route as PatientAssistantRouteImport } from './routes/patient.assistant'
@@ -66,6 +78,41 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminProfileRoute = AdminProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSystemRoute = AdminSystemRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
@@ -99,6 +146,31 @@ const AuthVerifyOtpRoute = AuthVerifyOtpRouteImport.update({
 const CaregiverIndexRoute = CaregiverIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => CaregiverRoute,
+} as any)
+const CaregiverAlertsRoute = CaregiverAlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
+  getParentRoute: () => CaregiverRoute,
+} as any)
+const CaregiverPatientsRoute = CaregiverPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => CaregiverRoute,
+} as any)
+const CaregiverProfileRoute = CaregiverProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => CaregiverRoute,
+} as any)
+const CaregiverReportsRoute = CaregiverReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => CaregiverRoute,
+} as any)
+const CaregiverSettingsRoute = CaregiverSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => CaregiverRoute,
 } as any)
 const PatientIndexRoute = PatientIndexRouteImport.update({
@@ -173,12 +245,24 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
   '/caregiver': typeof CaregiverRouteWithChildren
   '/patient': typeof PatientRouteWithChildren
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/system': typeof AdminSystemRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/register': typeof AuthRegisterRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/auth/verify-otp': typeof AuthVerifyOtpRoute
+  '/caregiver/alerts': typeof CaregiverAlertsRoute
+  '/caregiver/patients': typeof CaregiverPatientsRoute
+  '/caregiver/profile': typeof CaregiverProfileRoute
+  '/caregiver/reports': typeof CaregiverReportsRoute
+  '/caregiver/settings': typeof CaregiverSettingsRoute
   '/patient/analytics': typeof PatientAnalyticsRoute
   '/patient/assistant': typeof PatientAssistantRoute
   '/patient/calendar': typeof PatientCalendarRoute
@@ -198,12 +282,24 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/system': typeof AdminSystemRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/register': typeof AuthRegisterRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/auth/verify-otp': typeof AuthVerifyOtpRoute
+  '/caregiver/alerts': typeof CaregiverAlertsRoute
+  '/caregiver/patients': typeof CaregiverPatientsRoute
+  '/caregiver/profile': typeof CaregiverProfileRoute
+  '/caregiver/reports': typeof CaregiverReportsRoute
+  '/caregiver/settings': typeof CaregiverSettingsRoute
   '/patient/analytics': typeof PatientAnalyticsRoute
   '/patient/assistant': typeof PatientAssistantRoute
   '/patient/calendar': typeof PatientCalendarRoute
@@ -227,12 +323,24 @@ export interface FileRoutesById {
   '/auth': typeof AuthRouteWithChildren
   '/caregiver': typeof CaregiverRouteWithChildren
   '/patient': typeof PatientRouteWithChildren
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/system': typeof AdminSystemRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/register': typeof AuthRegisterRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/auth/verify-otp': typeof AuthVerifyOtpRoute
+  '/caregiver/alerts': typeof CaregiverAlertsRoute
+  '/caregiver/patients': typeof CaregiverPatientsRoute
+  '/caregiver/profile': typeof CaregiverProfileRoute
+  '/caregiver/reports': typeof CaregiverReportsRoute
+  '/caregiver/settings': typeof CaregiverSettingsRoute
   '/patient/analytics': typeof PatientAnalyticsRoute
   '/patient/assistant': typeof PatientAssistantRoute
   '/patient/calendar': typeof PatientCalendarRoute
@@ -257,12 +365,24 @@ export interface FileRouteTypes {
     | '/auth'
     | '/caregiver'
     | '/patient'
+    | '/admin/analytics'
+    | '/admin/audit'
+    | '/admin/notifications'
+    | '/admin/profile'
+    | '/admin/settings'
+    | '/admin/system'
+    | '/admin/users'
     | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/register'
     | '/auth/reset-password'
     | '/auth/verify-email'
     | '/auth/verify-otp'
+    | '/caregiver/alerts'
+    | '/caregiver/patients'
+    | '/caregiver/profile'
+    | '/caregiver/reports'
+    | '/caregiver/settings'
     | '/patient/analytics'
     | '/patient/assistant'
     | '/patient/calendar'
@@ -282,12 +402,24 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/admin/analytics'
+    | '/admin/audit'
+    | '/admin/notifications'
+    | '/admin/profile'
+    | '/admin/settings'
+    | '/admin/system'
+    | '/admin/users'
     | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/register'
     | '/auth/reset-password'
     | '/auth/verify-email'
     | '/auth/verify-otp'
+    | '/caregiver/alerts'
+    | '/caregiver/patients'
+    | '/caregiver/profile'
+    | '/caregiver/reports'
+    | '/caregiver/settings'
     | '/patient/analytics'
     | '/patient/assistant'
     | '/patient/calendar'
@@ -310,12 +442,24 @@ export interface FileRouteTypes {
     | '/auth'
     | '/caregiver'
     | '/patient'
+    | '/admin/analytics'
+    | '/admin/audit'
+    | '/admin/notifications'
+    | '/admin/profile'
+    | '/admin/settings'
+    | '/admin/system'
+    | '/admin/users'
     | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/register'
     | '/auth/reset-password'
     | '/auth/verify-email'
     | '/auth/verify-otp'
+    | '/caregiver/alerts'
+    | '/caregiver/patients'
+    | '/caregiver/profile'
+    | '/caregiver/reports'
+    | '/caregiver/settings'
     | '/patient/analytics'
     | '/patient/assistant'
     | '/patient/calendar'
@@ -385,6 +529,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/notifications': {
+      id: '/admin/notifications'
+      path: '/notifications'
+      fullPath: '/admin/notifications'
+      preLoaderRoute: typeof AdminNotificationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/profile': {
+      id: '/admin/profile'
+      path: '/profile'
+      fullPath: '/admin/profile'
+      preLoaderRoute: typeof AdminProfileRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/system': {
+      id: '/admin/system'
+      path: '/system'
+      fullPath: '/admin/system'
+      preLoaderRoute: typeof AdminSystemRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/auth/forgot-password': {
       id: '/auth/forgot-password'
       path: '/forgot-password'
@@ -432,6 +625,41 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/caregiver/'
       preLoaderRoute: typeof CaregiverIndexRouteImport
+      parentRoute: typeof CaregiverRoute
+    }
+    '/caregiver/alerts': {
+      id: '/caregiver/alerts'
+      path: '/alerts'
+      fullPath: '/caregiver/alerts'
+      preLoaderRoute: typeof CaregiverAlertsRouteImport
+      parentRoute: typeof CaregiverRoute
+    }
+    '/caregiver/patients': {
+      id: '/caregiver/patients'
+      path: '/patients'
+      fullPath: '/caregiver/patients'
+      preLoaderRoute: typeof CaregiverPatientsRouteImport
+      parentRoute: typeof CaregiverRoute
+    }
+    '/caregiver/profile': {
+      id: '/caregiver/profile'
+      path: '/profile'
+      fullPath: '/caregiver/profile'
+      preLoaderRoute: typeof CaregiverProfileRouteImport
+      parentRoute: typeof CaregiverRoute
+    }
+    '/caregiver/reports': {
+      id: '/caregiver/reports'
+      path: '/reports'
+      fullPath: '/caregiver/reports'
+      preLoaderRoute: typeof CaregiverReportsRouteImport
+      parentRoute: typeof CaregiverRoute
+    }
+    '/caregiver/settings': {
+      id: '/caregiver/settings'
+      path: '/settings'
+      fullPath: '/caregiver/settings'
+      preLoaderRoute: typeof CaregiverSettingsRouteImport
       parentRoute: typeof CaregiverRoute
     }
     '/patient/': {
@@ -529,10 +757,24 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminNotificationsRoute: typeof AdminNotificationsRoute
+  AdminProfileRoute: typeof AdminProfileRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminSystemRoute: typeof AdminSystemRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
+  AdminAuditRoute: AdminAuditRoute,
+  AdminNotificationsRoute: AdminNotificationsRoute,
+  AdminProfileRoute: AdminProfileRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminSystemRoute: AdminSystemRoute,
+  AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 
@@ -559,10 +801,20 @@ const AuthRouteChildren: AuthRouteChildren = {
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 interface CaregiverRouteChildren {
+  CaregiverAlertsRoute: typeof CaregiverAlertsRoute
+  CaregiverPatientsRoute: typeof CaregiverPatientsRoute
+  CaregiverProfileRoute: typeof CaregiverProfileRoute
+  CaregiverReportsRoute: typeof CaregiverReportsRoute
+  CaregiverSettingsRoute: typeof CaregiverSettingsRoute
   CaregiverIndexRoute: typeof CaregiverIndexRoute
 }
 
 const CaregiverRouteChildren: CaregiverRouteChildren = {
+  CaregiverAlertsRoute: CaregiverAlertsRoute,
+  CaregiverPatientsRoute: CaregiverPatientsRoute,
+  CaregiverProfileRoute: CaregiverProfileRoute,
+  CaregiverReportsRoute: CaregiverReportsRoute,
+  CaregiverSettingsRoute: CaregiverSettingsRoute,
   CaregiverIndexRoute: CaregiverIndexRoute,
 }
 

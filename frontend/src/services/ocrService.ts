@@ -1,29 +1,144 @@
-import api from "./api";
+import axios from "axios";
 
-export const scanPrescription = async (file: File) => {
-  const formData = new FormData();
 
-  formData.append("file", file);
+// ============================================================
+// OCR TYPES
+// ============================================================
 
-  const response = await api.post(
-    "/ocr/prescription",
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }
+export interface OcrMedicine {
+  medicine_name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+  reminder_times: string[];
+  quantity: number | null;
+}
+
+export interface OcrResult {
+  medicines: OcrMedicine[];
+  doctor_name: string;
+  hospital: string;
+  patient_name: string;
+  date: string;
+}
+
+
+// ============================================================
+// SAVE TYPES
+// ============================================================
+
+export interface SaveOcrMedicine {
+  medicine_name: string;
+  dosage: string;
+  frequency: string;
+  reminder_time: string;
+  start_date: string;
+  end_date: string;
+  instructions?: string;
+  total_quantity: number;
+  remaining_quantity: number;
+  tablets_per_day: number;
+  low_stock_threshold: number;
+}
+
+export interface SaveOcrResponse {
+  message: string;
+  saved_count: number;
+  skipped_count: number;
+  saved: Array<{
+    id: number;
+    medicine_name: string;
+  }>;
+  skipped: Array<{
+    medicine_name: string;
+    reason: string;
+    id?: number;
+  }>;
+}
+
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function getAuthHeaders() {
+  const token = localStorage.getItem(
+    "access_token",
   );
 
-  return response.data;
-};
+  return token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {};
+}
 
-export const savePrescription = async (data: any) => {
 
-    const response = await api.post(
-        "/ocr/save-prescription",
-        data
+// ============================================================
+// SCAN PRESCRIPTION
+// ============================================================
+
+export async function scanPrescription(
+  file: File,
+): Promise<OcrResult> {
+  if (!file) {
+    throw new Error(
+      "Please select a prescription image.",
+    );
+  }
+
+  const formData = new FormData();
+
+  formData.append(
+    "file",
+    file,
+    file.name,
+  );
+
+  const response =
+    await axios.post<OcrResult>(
+      "http://localhost:8000/ocr/prescription",
+      formData,
+      {
+        timeout: 180000,
+        headers: {
+          ...getAuthHeaders(),
+        },
+      },
     );
 
-    return response.data;
-};
+  return response.data;
+}
+
+
+// ============================================================
+// SAVE ALL OCR MEDICINES
+// ============================================================
+
+export async function saveOcrMedicines(
+  medicines: SaveOcrMedicine[],
+): Promise<SaveOcrResponse> {
+  if (!medicines.length) {
+    throw new Error(
+      "No medicines to save.",
+    );
+  }
+
+  const response =
+    await axios.post<SaveOcrResponse>(
+      "http://localhost:8000/ocr/save-prescription",
+      {
+        medicines,
+      },
+      {
+        timeout: 30000,
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+  return response.data;
+}

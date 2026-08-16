@@ -1,508 +1,1347 @@
-import { useEffect, useState, useRef } from "react";
+import axios from "axios";
+
+import {
+  ChangeEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import { createFileRoute } from "@tanstack/react-router";
-import { Camera, CheckCircle2, FileScan, Loader2, RefreshCcw, Save, Upload } from "lucide-react";
+
+import {
+  CheckCircle2,
+  FileScan,
+  Loader2,
+  Save,
+  Upload,
+  X,
+} from "lucide-react";
+
 import { toast } from "sonner";
-import { scanPrescription, savePrescription } from "@/services/ocrService";
-import { saveMedicines } from "@/services/medicineService";
+
+import {
+  scanPrescription,
+  saveOcrMedicines,
+  type OcrMedicine,
+  type OcrResult,
+  type SaveOcrMedicine,
+} from "@/services/ocrService";
 
 import { SectionHeading } from "@/components/portal/stat-card";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
 
-export const Route = createFileRoute("/patient/ocr")({
+
+export const Route = createFileRoute(
+  "/patient/ocr",
+)({
   head: () => ({
     meta: [
-      { title: "Prescription OCR — MediCare AI" },
-      { name: "description", content: "Upload or capture a prescription and auto-extract medicines, dosage and duration." },
-      { property: "og:title", content: "Prescription OCR — MediCare AI" },
-      { property: "og:description", content: "AI-verified OCR extraction with confidence scoring and manual edits." },
+      {
+        title: "Prescription OCR — MediCare AI",
+      },
+      {
+        name: "description",
+        content:
+          "Scan a prescription, review detected medicines and save them together.",
+      },
     ],
   }),
-  component: OcrPage,
+
+  component: PrescriptionOcrPage,
 });
 
-function OcrPage() {
-  const [state, setState] = useState<"idle" | "scanning" | "done">("idle");
-  const [dragging, setDragging] = useState(false);
-  const [medicines, setMedicines] = useState<any[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const [preview, setPreview] = useState<string | null>(null);
+type EditableMedicine = {
+  medicine_name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+  reminder_times: string[];
+  quantity: string;
+  start_date: string;
+  end_date: string;
+  low_stock_threshold: string;
+};
 
-  const [ocrText, setOcrText] = useState("");
 
-  const [loading, setLoading] = useState(false);
+const EMPTY_RESULT: OcrResult = {
+  medicines: [],
+  doctor_name: "",
+  hospital: "",
+  patient_name: "",
+  date: "",
+};
 
-  const [ocrResult, setOcrResult] = useState<any>(null);
 
-  
+function todayString(): string {
+  return new Date()
+    .toISOString()
+    .slice(0, 10);
+}
 
-  const handlePrescriptionScan = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
 
-      const selectedFile = e.target.files?.[0];
+function addDays(
+  start: string,
+  days: number,
+): string {
+  const date = new Date(
+    `${start}T00:00:00`,
+  );
 
-      if (!selectedFile) return;
+  date.setDate(
+    date.getDate() + days,
+  );
 
-      setFile(selectedFile);
+  return date
+    .toISOString()
+    .slice(0, 10);
+}
 
-      setPreview(URL.createObjectURL(selectedFile));
 
-      await runScan(selectedFile);
+function frequencyDefaults(
+  frequency: string,
+): string[] {
+  const lower = (
+    frequency || ""
+  ).toLowerCase();
 
-  };
+  if (
+    lower.includes("three") ||
+    lower.includes("3")
+  ) {
+    return [
+      "09:00",
+      "14:00",
+      "20:00",
+    ];
+  }
 
-  const runScan = async (selectedFile?: File) => {
+  if (
+    lower.includes("twice") ||
+    lower.includes("2")
+  ) {
+    return [
+      "09:00",
+      "21:00",
+    ];
+  }
 
-    const scanFile = selectedFile || file;
+  return ["09:00"];
+}
 
-    if (!scanFile) {
-        toast.error("Please select a prescription.");
-        return;
-    }
 
-    setScanning(true);
-    setState("scanning");
-
-    try {
-
-        const data = await scanPrescription(scanFile);
-
-        console.log(data);
-
-        console.log(data.medicines);
-
-        setOcrResult(data);
-
-        setMedicines(data.medicines || []);
-
-        console.log("Medicines State:", data.medicines);
-
-        setOcrText(JSON.stringify(data, null, 2));
-
-        setState("done");
-
-        localStorage.setItem(
-            "ocrData",
-            JSON.stringify(data)
-        );
-
-        toast.success("Prescription scanned successfully!");
-
-    } catch (err: any) {
-
-        console.error(err);
-
-        const message =
-            err?.response?.data?.detail ||
-            "Failed to scan prescription";
-
-        toast.error(message);
-
-    } finally {
-
-        setScanning(false);
-
-    }
-
-  };
-
-  // preview and ocrText state are declared above; avoid redeclaration
-  // handleFile logic integrated with Input onChange below; remove duplicate UI snippets
-
-  const handleAutoFill = () => {
-
-    if (!ocrResult?.medicines?.length) {
-
-        toast.error("No medicine detected");
-
-        return;
-    }
-
-    localStorage.setItem(
-        "ocrData",
-        JSON.stringify(ocrResult)
+function getDurationDays(
+  duration: string,
+): number {
+  const match =
+    (duration || "").match(
+      /(\d+)\s*days?/i,
     );
 
-    window.location.href="/patient/medicines/add";
+  return match
+    ? Number(match[1])
+    : 30;
+}
 
+
+function toEditableMedicine(
+  medicine: OcrMedicine,
+): EditableMedicine {
+  const start = todayString();
+
+  const frequency =
+    medicine.frequency ||
+    "Once daily";
+
+  const reminderTimes =
+    medicine.reminder_times &&
+    medicine.reminder_times.length > 0
+      ? medicine.reminder_times
+      : frequencyDefaults(
+          frequency,
+        );
+
+  const quantity =
+    medicine.quantity &&
+    medicine.quantity > 0
+      ? String(
+          medicine.quantity,
+        )
+      : "30";
+
+  return {
+    medicine_name:
+      medicine.medicine_name || "",
+
+    dosage:
+      medicine.dosage || "",
+
+    frequency,
+
+    duration:
+      medicine.duration || "",
+
+    instructions:
+      medicine.instructions || "",
+
+    reminder_times:
+      [...reminderTimes],
+
+    quantity,
+
+    start_date: start,
+
+    end_date: addDays(
+      start,
+      getDurationDays(
+        medicine.duration || "",
+      ),
+    ),
+
+    low_stock_threshold:
+      "5",
   };
+}
+
+
+function formatTime(
+  value: string,
+): string {
+  const match =
+    value.match(
+      /^(\d{2}):(\d{2})$/,
+    );
+
+  if (!match) {
+    return value;
+  }
+
+  const hour =
+    Number(match[1]);
+
+  const suffix =
+    hour >= 12
+      ? "PM"
+      : "AM";
+
+  const hour12 =
+    hour % 12 || 12;
+
+  return `${String(
+    hour12,
+  ).padStart(
+    2,
+    "0",
+  )}:${match[2]} ${suffix}`;
+}
+
+
+function getErrorMessage(
+  error: unknown,
+): string {
+  const axiosError =
+    error as {
+      response?: {
+        data?: {
+          detail?: unknown;
+        };
+      };
+      message?: string;
+    };
+
+  const detail =
+    axiosError.response?.data
+      ?.detail;
+
+  if (
+    typeof detail === "string"
+  ) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item: unknown) => {
+        if (
+          item &&
+          typeof item === "object" &&
+          "msg" in item
+        ) {
+          return String(
+            (
+              item as {
+                msg?: unknown;
+              }
+            ).msg || "",
+          );
+        }
+
+        return "";
+      })
+      .filter(Boolean);
+
+    if (messages.length > 0) {
+      return messages.join(" ");
+    }
+  }
+
+  if (
+    detail &&
+    typeof detail === "object" &&
+    "msg" in detail
+  ) {
+    return String(
+      (
+        detail as {
+          msg?: unknown;
+        }
+      ).msg ||
+        "Something went wrong.",
+    );
+  }
+
+  return (
+    axiosError.message ||
+    "Something went wrong."
+  );
+}
+
+
+function PrescriptionOcrPage() {
+  const inputRef =
+    useRef<HTMLInputElement>(null);
+
+  const [file, setFile] =
+    useState<File | null>(null);
+
+  const [preview, setPreview] =
+    useState<string | null>(null);
+
+  const [scanning, setScanning] =
+    useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [
+    result,
+    setResult,
+  ] = useState<OcrResult>(
+    EMPTY_RESULT,
+  );
+
+  const [
+    medicines,
+    setMedicines,
+  ] = useState<EditableMedicine[]>(
+    [],
+  );
+
+
+  useEffect(() => {
+    return () => {
+      if (preview) {
+        URL.revokeObjectURL(
+          preview,
+        );
+      }
+    };
+  }, [preview]);
+
+
+  const chooseFile = async (
+    selectedFile: File,
+  ) => {
+    if (
+      !selectedFile.type.startsWith(
+        "image/",
+      )
+    ) {
+      toast.error(
+        "Please select a prescription image.",
+      );
+      return;
+    }
+
+    if (preview) {
+      URL.revokeObjectURL(
+        preview,
+      );
+    }
+
+    setFile(selectedFile);
+
+    setPreview(
+      URL.createObjectURL(
+        selectedFile,
+      ),
+    );
+
+    try {
+      setScanning(true);
+
+      const data =
+        await scanPrescription(
+          selectedFile,
+        );
+
+      const safeResult: OcrResult = {
+        medicines:
+          Array.isArray(
+            data?.medicines,
+          )
+            ? data.medicines
+            : [],
+        doctor_name:
+          data?.doctor_name || "",
+        hospital:
+          data?.hospital || "",
+        patient_name:
+          data?.patient_name || "",
+        date:
+          data?.date || "",
+      };
+
+      setResult(safeResult);
+
+      const extracted =
+        safeResult.medicines.map(
+          toEditableMedicine,
+        );
+
+      setMedicines(extracted);
+
+      if (extracted.length === 0) {
+        toast.warning(
+          "The prescription was read, but no medicines were detected.",
+        );
+        return;
+      }
+
+      toast.success(
+        `${extracted.length} medicine${
+          extracted.length === 1
+            ? ""
+            : "s"
+        } detected.`,
+      );
+
+    } catch (error) {
+      console.error(
+        "Prescription OCR error:",
+        error,
+      );
+
+      toast.error(
+        getErrorMessage(
+          error,
+        ),
+      );
+
+    } finally {
+      setScanning(false);
+    }
+  };
+
+
+  const handleFileChange = (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const selected =
+      event.target.files?.[0];
+
+    if (selected) {
+      void chooseFile(selected);
+    }
+
+    event.target.value = "";
+  };
+
+
+  const updateMedicine = (
+    index: number,
+    field: keyof EditableMedicine,
+    value: string,
+  ) => {
+    setMedicines(
+      current =>
+        current.map(
+          (
+            medicine,
+            medicineIndex,
+          ) =>
+            medicineIndex === index
+              ? {
+                  ...medicine,
+                  [field]:
+                    value,
+                }
+              : medicine,
+        ),
+    );
+  };
+
+
+  const updateReminderTime = (
+    medicineIndex: number,
+    timeIndex: number,
+    value: string,
+  ) => {
+    setMedicines(
+      current =>
+        current.map(
+          (
+            medicine,
+            index,
+          ) => {
+            if (
+              index !==
+              medicineIndex
+            ) {
+              return medicine;
+            }
+
+            const times = [
+              ...medicine.reminder_times,
+            ];
+
+            times[
+              timeIndex
+            ] = value;
+
+            return {
+              ...medicine,
+              reminder_times:
+                times,
+            };
+          },
+        ),
+    );
+  };
+
+
+  const addReminderTime = (
+    medicineIndex: number,
+  ) => {
+    setMedicines(
+      current =>
+        current.map(
+          (
+            medicine,
+            index,
+          ) => {
+            if (
+              index !==
+              medicineIndex
+            ) {
+              return medicine;
+            }
+
+            if (
+              medicine.reminder_times
+                .length >= 3
+            ) {
+              return medicine;
+            }
+
+            return {
+              ...medicine,
+              reminder_times: [
+                ...medicine.reminder_times,
+                "09:00",
+              ],
+            };
+          },
+        ),
+    );
+  };
+
+
+  const removeReminderTime = (
+    medicineIndex: number,
+    timeIndex: number,
+  ) => {
+    setMedicines(
+      current =>
+        current.map(
+          (
+            medicine,
+            index,
+          ) => {
+            if (
+              index !==
+              medicineIndex
+            ) {
+              return medicine;
+            }
+
+            if (
+              medicine.reminder_times
+                .length <= 1
+            ) {
+              return medicine;
+            }
+
+            return {
+              ...medicine,
+              reminder_times:
+                medicine.reminder_times.filter(
+                  (
+                    _,
+                    currentIndex,
+                  ) =>
+                    currentIndex !==
+                    timeIndex,
+                ),
+            };
+          },
+        ),
+    );
+  };
+
+
+  const saveAll = async () => {
+    if (medicines.length === 0) {
+      toast.error(
+        "No extracted medicines to save.",
+      );
+      return;
+    }
+
+    for (
+      const medicine of medicines
+    ) {
+      const name =
+        medicine.medicine_name.trim();
+
+      const dosage =
+        medicine.dosage.trim();
+
+      const frequency =
+        medicine.frequency.trim();
+
+      const quantity =
+        Number(
+          medicine.quantity,
+        );
+
+      const lowStock =
+        Number(
+          medicine.low_stock_threshold,
+        );
+
+      const times =
+        medicine.reminder_times;
+
+      if (
+        !name ||
+        !dosage ||
+        !frequency
+      ) {
+        toast.error(
+          "Please complete medicine name, dosage and frequency for every medicine.",
+        );
+        return;
+      }
+
+      if (times.length === 0) {
+        toast.error(
+          `Add at least one reminder time for ${name}.`,
+        );
+        return;
+      }
+
+      const invalidTime =
+        times.some(
+          time =>
+            !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(
+              time,
+            ),
+        );
+
+      if (invalidTime) {
+        toast.error(
+          `Please enter valid HH:MM reminder times for ${name}.`,
+        );
+        return;
+      }
+
+      if (
+        times.length >
+        new Set(times).size
+      ) {
+        toast.error(
+          `Reminder times for ${name} must be unique.`,
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(
+          quantity,
+        ) ||
+        quantity < 1
+      ) {
+        toast.error(
+          `Enter a valid quantity for ${name}.`,
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(
+          lowStock,
+        ) ||
+        lowStock < 1 ||
+        lowStock >= quantity
+      ) {
+        toast.error(
+          `Low Stock Alert for ${name} must be at least 1 and lower than the quantity.`,
+        );
+        return;
+      }
+
+      if (
+        !medicine.start_date ||
+        !medicine.end_date
+      ) {
+        toast.error(
+          `Start and end dates are required for ${name}.`,
+        );
+        return;
+      }
+    }
+
+
+    try {
+      setSaving(true);
+
+      const payload: SaveOcrMedicine[] =
+        medicines.map(
+          medicine => ({
+            medicine_name:
+              medicine.medicine_name.trim(),
+
+            dosage:
+              medicine.dosage.trim(),
+
+            frequency:
+              medicine.frequency.trim(),
+
+            duration:
+              medicine.duration.trim() ||
+              "",
+
+            reminder_time:
+              medicine.reminder_times.join(
+                ",",
+              ),
+
+            reminder_times:
+              [...medicine.reminder_times],
+
+            quantity:
+              Number(
+                medicine.quantity,
+              ),
+
+            start_date:
+              medicine.start_date,
+
+            end_date:
+              medicine.end_date,
+
+            instructions:
+              (medicine.instructions ?? "")
+                .trim(),
+
+            total_quantity:
+              Number(
+                medicine.quantity,
+              ),
+
+            remaining_quantity:
+              Number(
+                medicine.quantity,
+              ),
+
+            tablets_per_day:
+              medicine.reminder_times.length,
+
+            low_stock_threshold:
+              Number(
+                medicine.low_stock_threshold,
+              ),
+          }),
+        );
+
+      /*
+       * IMPORTANT FIX:
+       * Call the API function saveOcrMedicines().
+       * Do NOT call setMedicines(payload) here.
+       */
+      const response =
+        await saveOcrMedicines(
+          payload,
+        );
+
+      toast.success(
+        `${response.saved_count} medicine${
+          response.saved_count === 1
+            ? ""
+            : "s"
+        } saved successfully.`,
+      );
+
+      if (
+        response.skipped_count >
+        0
+      ) {
+        toast.info(
+          `${response.skipped_count} duplicate medicine${
+            response.skipped_count === 1
+              ? ""
+              : "s"
+          } skipped.`,
+        );
+      }
+
+      setMedicines([]);
+
+      setResult(
+        EMPTY_RESULT,
+      );
+
+    } catch (error) {
+      console.error(
+        "Save OCR medicines error:",
+        error,
+      );
+
+      toast.error(
+        getErrorMessage(
+          error,
+        ),
+      );
+
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+  const clearScan = () => {
+    if (preview) {
+      URL.revokeObjectURL(
+        preview,
+      );
+    }
+
+    setPreview(null);
+    setFile(null);
+    setResult(
+      EMPTY_RESULT,
+    );
+    setMedicines([]);
+
+    if (inputRef.current) {
+      inputRef.current.value =
+        "";
+    }
+  };
+
 
   return (
     <div className="space-y-6">
-    <input
-      ref={fileInputRef}
-      type="file"
-      accept="image/*,.pdf"
-      hidden
-      onChange={handlePrescriptionScan}
-    />
-
-    <input
-      ref={cameraInputRef}
-      type="file"
-      accept="image/*"
-      capture="environment"
-      hidden
-      onChange={handlePrescriptionScan}
-    />
 
       <SectionHeading
-        title="OCR prescription module"
-        description="Upload, drag & drop or capture a prescription — MediCare AI extracts every field for review."
+        title="Prescription OCR"
+        description="Scan a prescription, review every detected medicine, edit missing details, and save all medicines together."
       />
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
-        <Card className="gap-0 rounded-2xl border-border/70 p-6 shadow-soft">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e: React.DragEvent<HTMLDivElement>) => {
-              e.preventDefault();
-              setDragging(false);
-              const dropped = e.dataTransfer.files?.[0];
-              if (!dropped) return;
-              setFile(dropped);
-              setPreview(URL.createObjectURL(dropped));
-            }}
-            className={cn(
-              "flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-colors",
-              dragging ? "border-primary bg-primary-soft" : "border-border bg-muted/40",
+
+      <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff"
+          hidden
+          onChange={
+            handleFileChange
+          }
+        />
+
+
+        <div className="rounded-2xl border-2 border-dashed border-border p-8 text-center">
+
+          <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary-soft text-primary">
+            {scanning ? (
+              <Loader2 className="size-7 animate-spin" />
+            ) : (
+              <FileScan className="size-7" />
             )}
-          >
-            <span className="grid size-14 place-items-center rounded-2xl bg-primary-soft text-primary">
-              <Upload className="size-7" aria-hidden="true" />
-            </span>
-            <p className="mt-4 font-bold text-foreground">Drag & drop your prescription</p>
-            <p className="mt-1 text-sm text-muted-foreground">PNG, JPG or PDF up to 10 MB</p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <Button
-                  className="bg-brand-gradient rounded-full font-semibold shadow-glow"
-                  onClick={() => fileInputRef.current?.click()}
-              >
-                  <FileScan className="size-4" />
-                  Upload
-              </Button>
-              <Button
-              variant="outline"
-              className="rounded-full font-semibold"
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={scanning}
-              >
-                <Camera className="size-4" /> Use camera
-              </Button>
-            </div>
           </div>
 
-          <div className="mt-5 space-y-2">
 
-            {preview && (
+          <h3 className="mt-4 text-lg font-bold">
+            Scan prescription
+          </h3>
 
-            <div className="mt-5">
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            Upload a clear prescription image. All detected medicines will appear below.
+          </p>
+
+
+          <Button
+            type="button"
+            className="mt-5 rounded-full"
+            disabled={scanning}
+            onClick={() =>
+              inputRef.current?.click()
+            }
+          >
+            <Upload className="size-4" />
+
+            {scanning
+              ? "Scanning..."
+              : "Upload prescription"}
+          </Button>
+
+        </div>
+
+      </Card>
+
+
+      {preview && (
+        <Card className="rounded-2xl border-border/70 p-5 shadow-soft">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+              <p className="font-semibold">
+                Prescription preview
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                {file?.name}
+              </p>
+            </div>
+
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={
+                clearScan
+              }
+            >
+              Clear
+            </Button>
+
+          </div>
+
+
+          <div className="mt-4 overflow-hidden rounded-2xl border border-border/70 bg-black/20">
 
             <img
-
-            src={preview}
-
-            className="rounded-xl border w-64"
-
-            alt="Prescription Preview"
-
+              src={preview}
+              alt="Prescription preview"
+              className="max-h-[520px] w-full object-contain"
             />
 
-            </div>
-
-            )}
           </div>
+
         </Card>
-      </div>    
+      )}
 
-        <Card className="gap-0 rounded-2xl border-border/70 p-6 shadow-soft">
-          <SectionHeading
-            title="Extraction preview"
-            description="Review and edit every field before saving"
-            action={
-              state === "done" ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent">
-                  <CheckCircle2 className="size-3.5" aria-hidden="true" /> AI verified · 94%
-                </span>
-              ) : undefined
-            }
-          />
 
-          {state === "idle" && (
-            <div className="mt-6 rounded-2xl border border-dashed border-border bg-muted/40 px-6 py-12 text-center">
-              <p className="font-semibold text-foreground">No prescription scanned yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">Upload a document to see extracted fields here.</p>
+      {medicines.length > 0 && (
+        <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+
+          <div className="flex items-center justify-between gap-4">
+
+            <div>
+              <p className="text-lg font-bold">
+                Detected medicines
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review every medicine before saving.
+              </p>
             </div>
-          )}
 
-          {state === "scanning" && (
-            <div className="mt-6 space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" /> {scanning && (
+            <CheckCircle2 className="size-5 text-accent" />
 
-                <div className="flex items-center gap-2">
+          </div>
 
-                <Loader2 className="animate-spin"/>
 
-                Reading Prescription...
+          <div className="mt-6 space-y-5">
 
-                </div>
+            {medicines.map(
+              (
+                medicine,
+                index,
+              ) => (
+                <Card
+                  key={`${medicine.medicine_name}-${index}`}
+                  className="rounded-2xl border-border/70 bg-muted/20 p-5"
+                >
 
-                )}
-              </div>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-14 w-full rounded-xl" />
-              ))}
-            </div>
-          )}
-        </Card>  
+                  <div className="mb-4 flex items-center justify-between">
 
-          {state === "done" && (
-            <>
-              {/* OCR JSON (Optional - remove later if you don't need it) */}
-              <Card className="mb-5 p-4">
-                <h3 className="font-semibold">Extracted OCR Text</h3>
-
-                <textarea
-                  value={ocrText}
-                  readOnly
-                  rows={6}
-                  className="w-full mt-3 rounded-lg border p-3 text-sm"
-                />
-              </Card>
-
-              {/* Medicines */}
-
-              <div className="space-y-6">
-
-                {medicines.map((medicine, index) => (
-
-                  <Card key={index} className="p-5">
-
-                    <h3 className="text-lg font-bold mb-5">
+                    <p className="font-bold">
                       Medicine {index + 1}
-                    </h3>
+                    </p>
 
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
+                      OCR detected
+                    </span>
 
-                      <div>
-                        <Label>Medicine Name</Label>
+                  </div>
 
-                        <Input
-                          value={medicine.medicine_name}
-                          onChange={(e) => {
 
-                            const updated = [...medicines];
+                  <div className="grid gap-4 sm:grid-cols-2">
 
-                            updated[index].medicine_name = e.target.value;
+                    <div className="space-y-2">
+                      <Label>
+                        Medicine name
+                      </Label>
 
-                            setMedicines(updated);
+                      <Input
+                        value={
+                          medicine.medicine_name
+                        }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "medicine_name",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
 
-                          }}
-                        />
-                      </div>
 
-                      <div>
-                        <Label>Dosage</Label>
+                    <div className="space-y-2">
+                      <Label>
+                        Dosage
+                      </Label>
 
-                        <Input
-                          value={medicine.dosage}
-                          onChange={(e) => {
+                      <Input
+                        value={
+                          medicine.dosage
+                        }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "dosage",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
 
-                            const updated = [...medicines];
 
-                            updated[index].dosage = e.target.value;
+                    <div className="space-y-2">
+                      <Label>
+                        Frequency
+                      </Label>
 
-                            setMedicines(updated);
+                      <Input
+                        value={
+                          medicine.frequency
+                        }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "frequency",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
 
-                          }}
-                        />
-                      </div>
 
-                      <div>
-                        <Label>Frequency</Label>
+                    <div className="space-y-2">
+                      <Label>
+                        Duration
+                      </Label>
 
-                        <Input
-                          value={medicine.frequency}
-                          onChange={(e) => {
+                      <Input
+                        value={
+                          medicine.duration
+                        }
+                        readOnly
+                      />
+                    </div>
 
-                            const updated = [...medicines];
+                  </div>
 
-                            updated[index].frequency = e.target.value;
 
-                            setMedicines(updated);
+                  <div className="mt-5 space-y-3">
 
-                          }}
-                        />
-                      </div>
+                    <div className="flex items-center justify-between">
 
-                      <div>
-                        <Label>Duration</Label>
+                      <Label>
+                        Reminder times
+                      </Label>
 
-                        <Input
-                          value={medicine.duration}
-                          onChange={(e) => {
-
-                            const updated = [...medicines];
-
-                            updated[index].duration = e.target.value;
-
-                            setMedicines(updated);
-
-                          }}
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <Label>Instructions</Label>
-
-                        <Input
-                          value={medicine.instructions}
-                          onChange={(e) => {
-
-                            const updated = [...medicines];
-
-                            updated[index].instructions = e.target.value;
-
-                            setMedicines(updated);
-
-                          }}
-                        />
-                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          medicine.reminder_times.length >= 3
+                        }
+                        onClick={() =>
+                          addReminderTime(
+                            index,
+                          )
+                        }
+                      >
+                        Add time
+                      </Button>
 
                     </div>
 
-                  </Card>
 
-                ))}
+                    <div className="grid gap-3 sm:grid-cols-3">
 
-              </div>
+                      {medicine.reminder_times.map(
+                        (
+                          time,
+                          timeIndex,
+                        ) => (
+                          <div
+                            key={timeIndex}
+                            className="flex gap-2"
+                          >
 
-              {/* Prescription Details */}
+                            <Input
+                              type="time"
+                              value={
+                                time
+                              }
+                              onChange={
+                                event =>
+                                  updateReminderTime(
+                                    index,
+                                    timeIndex,
+                                    event.target.value,
+                                  )
+                              }
+                            />
 
-              <Card className="mt-6 p-5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              disabled={
+                                medicine.reminder_times.length <=
+                                1
+                              }
+                              onClick={() =>
+                                removeReminderTime(
+                                  index,
+                                  timeIndex,
+                                )
+                              }
+                            >
+                              <X className="size-4" />
+                            </Button>
 
-                <h3 className="text-lg font-bold mb-5">
-                  Prescription Details
-                </h3>
+                          </div>
+                        ),
+                      )}
 
-                <div className="grid gap-4 md:grid-cols-2">
+                    </div>
 
-                  <div>
-                    <Label>Doctor</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When the prescription gives a schedule such as 1-0-1 instead of exact clock times, the app uses editable default times.
+                    </p>
 
-                    <Input
-                      value={ocrResult?.doctor_name || ""}
-                      readOnly
-                    />
                   </div>
 
-                  <div>
-                    <Label>Hospital</Label>
 
-                    <Input
-                      value={ocrResult?.hospital || ""}
-                      readOnly
-                    />
-                  </div>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-3">
 
-                  <div>
-                    <Label>Patient</Label>
+                    <div className="space-y-2">
+                      <Label>
+                        Start date
+                      </Label>
 
-                    <Input
-                      value={ocrResult?.patient_name || ""}
-                      readOnly
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Date</Label>
-
-                    <Input
-                      value={ocrResult?.date || ""}
-                      readOnly
-                    />
-                  </div>
-
-                </div>
-
-              </Card>
-
-              {/* Buttons */}
-
-              <div className="mt-6 flex flex-wrap gap-3">
-
-                <Button
-                    className="bg-brand-gradient rounded-full"
-                    onClick={async () => {
-
-                        try {
-
-                            await savePrescription({
-
-                                medicines,
-
-                                doctor_name: ocrResult?.doctor_name,
-
-                                hospital: ocrResult?.hospital,
-
-                                patient_name: ocrResult?.patient_name,
-
-                                date: ocrResult?.date
-
-                            });
-
-                            toast.success("Prescription saved successfully");
-
-                        } catch (e) {
-
-                            console.error(e);
-
-                            toast.error("Saving failed");
-
+                      <Input
+                        type="date"
+                        value={
+                          medicine.start_date
                         }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "start_date",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
 
-                    }}
-                >
-                    Save All Medicines
-                </Button>
 
-                <Button
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={handleAutoFill}
-                >
-                  <FileScan className="size-4 mr-2" />
-                  Auto Fill Medicine Form
-                </Button>
+                    <div className="space-y-2">
+                      <Label>
+                        End date
+                      </Label>
 
-                <Button
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() => runScan()}
-                >
-                  <RefreshCcw className="size-4 mr-2" />
-                  Re-scan
-                </Button>
+                      <Input
+                        type="date"
+                        value={
+                          medicine.end_date
+                        }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "end_date",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
 
-              </div>
 
-            </>
-          )}
-        </div>
-      );
-    }
+                    <div className="space-y-2">
+                      <Label>
+                        Quantity
+                      </Label>
+
+                      <Input
+                        type="number"
+                        min="1"
+                        value={
+                          medicine.quantity
+                        }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "quantity",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
+
+                  </div>
+
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+
+                    <div className="space-y-2">
+                      <Label>
+                        Low Stock Alert
+                      </Label>
+
+                      <Input
+                        type="number"
+                        min="1"
+                        value={
+                          medicine.low_stock_threshold
+                        }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "low_stock_threshold",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
+
+
+                    <div className="space-y-2">
+                      <Label>
+                        Instructions
+                      </Label>
+
+                      <Textarea
+                        value={
+                          medicine.instructions
+                        }
+                        onChange={event =>
+                          updateMedicine(
+                            index,
+                            "instructions",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="Instructions from prescription"
+                      />
+                    </div>
+
+                  </div>
+
+                </Card>
+              ),
+            )}
+
+          </div>
+
+
+          <div className="mt-6 flex justify-end">
+
+            <Button
+              type="button"
+              className="rounded-full bg-brand-gradient font-semibold shadow-glow"
+              disabled={
+                saving ||
+                scanning ||
+                medicines.length === 0
+              }
+              onClick={
+                saveAll
+              }
+            >
+              <Save className="size-4" />
+
+              {saving
+                ? "Saving medicines..."
+                : `Save all ${medicines.length} medicine${
+                    medicines.length ===
+                    1
+                      ? ""
+                      : "s"
+                  }`}
+            </Button>
+
+          </div>
+
+        </Card>
+      )}
+
+
+      {file &&
+        !scanning &&
+        medicines.length === 0 && (
+          <Card className="rounded-2xl border-warning/30 bg-warning/5 p-5">
+
+            <p className="font-semibold">
+              No medicines detected
+            </p>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              Please use a closer, sharper image with the medicine names and dosage clearly visible.
+            </p>
+
+          </Card>
+        )}
+
+    </div>
+  );
+}

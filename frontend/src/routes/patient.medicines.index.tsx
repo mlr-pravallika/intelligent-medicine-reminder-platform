@@ -42,6 +42,18 @@ export const Route = createFileRoute("/patient/medicines/")({
   component: MedicinesPage,
 });
 
+
+function splitReminderTimes(value: string | null | undefined): string[] {
+  return String(value ?? "")
+    .split(",")
+    .map((time) => time.trim())
+    .filter(Boolean);
+}
+
+function isLowStock(medicine: Medicine): boolean {
+  return Number(medicine.remaining_quantity ?? 0) <= 5;
+}
+
 function MedicinesPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -288,17 +300,46 @@ useEffect(() => {
 
                 </div>
 
-                <div className="flex justify-between">
+                <div>
 
-                  <span className="text-muted-foreground">
-                    Reminder
+                  <span className="text-muted-foreground text-sm">
+                    Reminder times
                   </span>
 
-                  <span className="font-semibold">
-                    {medicine.reminder_time}
-                  </span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {splitReminderTimes(medicine.reminder_time).map((time, index) => (
+                      <span
+                        key={`${medicine.id}-time-${index}`}
+                        className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs font-semibold"
+                      >
+                        🕘 {time}
+                      </span>
+                    ))}
+                  </div>
 
                 </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">
+                    Remaining
+                  </span>
+
+                  <span
+                    className={`font-semibold ${
+                      isLowStock(medicine)
+                        ? "text-warning"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {medicine.remaining_quantity ?? 0} tablets
+                  </span>
+                </div>
+
+                {isLowStock(medicine) && (
+                  <div className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
+                    ⚠ Low stock — only {medicine.remaining_quantity ?? 0} tablets remaining.
+                  </div>
+                )}
 
                 <div className="flex justify-between">
 
@@ -325,6 +366,12 @@ useEffect(() => {
                 </div>
 
               </div>
+
+              {isLowStock(medicine) && (
+                <div className="mt-4 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
+                  ⚠ Low stock — refill may be needed soon.
+                </div>
+              )}
 
               <Button
                 className="mt-6 w-full"
@@ -404,10 +451,26 @@ useEffect(() => {
                       </span>
                     </div>
 
+                    <div>
+                      <p className="text-muted-foreground">Reminder Times</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {splitReminderTimes(selected.reminder_time).map((time, index) => (
+                          <span
+                            key={`selected-time-${index}`}
+                            className="rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-sm font-semibold"
+                          >
+                            🕘 {time}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Reminder Time</span>
-                      <span className="font-medium">
-                        {selected.reminder_time}
+                      <span className="text-muted-foreground">Remaining Quantity</span>
+                      <span
+                        className={isLowStock(selected) ? "font-semibold text-warning" : "font-semibold"}
+                      >
+                        {selected.remaining_quantity ?? 0} tablets
                       </span>
                     </div>
 

@@ -1,24 +1,21 @@
 from datetime import datetime, timedelta, timezone
 import uuid
-from pydantic import BaseModel
 
 from jose import jwt, JWTError
-
 from passlib.context import CryptContext
 
-from fastapi import Depends
-
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from sqlalchemy.orm import Session
 
 from .database import get_db
-
 from .models import User
 
-from fastapi import Depends, HTTPException
 
-# ---------------- Password Hashing ---------------- #
+# ============================================================
+# PASSWORD HASHING
+# ============================================================
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -26,21 +23,23 @@ pwd_context = CryptContext(
 )
 
 
-def hash_password(password: str):
+def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
 def verify_password(
     password: str,
     hashed_password: str
-):
+) -> bool:
     return pwd_context.verify(
         password,
         hashed_password
     )
 
 
-# ---------------- JWT ---------------- #
+# ============================================================
+# JWT CONFIGURATION
+# ============================================================
 
 SECRET_KEY = "medicine-reminder-secret-key"
 
@@ -50,17 +49,25 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 10080
 
 security = HTTPBearer()
 
-def create_access_token(data: dict):
+
+# ============================================================
+# CREATE ACCESS TOKEN
+# ============================================================
+
+def create_access_token(data: dict) -> str:
 
     to_encode = data.copy()
 
     now = datetime.now(timezone.utc)
-    expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    expire = now + timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+    )
 
     to_encode.update({
         "exp": expire,
         "iat": now,
-        "jti": str(uuid.uuid4())   # unique ID for every token
+        "jti": str(uuid.uuid4())
     })
 
     token = jwt.encode(
@@ -69,9 +76,12 @@ def create_access_token(data: dict):
         algorithm=ALGORITHM
     )
 
-    print("Generated Token:", token)
-
     return token
+
+
+# ============================================================
+# VERIFY TOKEN
+# ============================================================
 
 def verify_token(token: str):
 
@@ -81,40 +91,56 @@ def verify_token(token: str):
         algorithms=[ALGORITHM]
     )
 
-from jose import JWTError
+
+# ============================================================
+# GET CURRENT USER
+# ============================================================
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
-):
+) -> User:
+
     token = credentials.credentials
 
-    print("Received Token:", token)
-
     try:
-        payload = verify_token(token)
 
-        print("Decoded Payload:", payload)
+        payload = verify_token(token)
 
         user_id = payload.get("sub")
 
         if user_id is None:
+
             raise HTTPException(
                 status_code=401,
-                detail="Invalid token (missing sub)"
+                detail="Invalid token: missing user id"
             )
 
-    except JWTError as e:
-        print("JWT ERROR:", repr(e))
+        try:
+            user_id = int(user_id)
+
+        except (TypeError, ValueError):
+
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token: invalid user id"
+            )
+
+    except JWTError:
 
         raise HTTPException(
             status_code=401,
-            detail=f"Invalid token: {str(e)}"
+            detail="Invalid or expired token"
         )
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
 
     if user is None:
+
         raise HTTPException(
             status_code=404,
             detail="User not found"
@@ -122,5 +148,24 @@ def get_current_user(
 
     return user
 
-class GoogleLogin(BaseModel):
-    credential: str
+
+# ============================================================
+# ROLE AUTHORIZATION
+# ============================================================
+
+def require_role(*allowed_roles: str):
+
+    def role_checker(
+        current_user: User = Depends(get_current_user)
+    ):
+
+        if current_user.role not in allowed_roles:
+
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this resource"
+            )
+
+        return current_user
+
+    return role_checker
