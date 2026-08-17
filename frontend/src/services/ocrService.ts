@@ -5,22 +5,28 @@ import axios from "axios";
 // OCR TYPES
 // ============================================================
 
+import api from "./api";
+
 export interface OcrMedicine {
   medicine_name: string;
   dosage: string;
   frequency: string;
-  duration: string;
-  instructions: string;
-  reminder_times: string[];
-  quantity: number | null;
+  reminder_time: string;
+  start_date: string;
+  end_date: string;
+  total_quantity: number;
+  remaining_quantity: number;
+  tablets_per_day: number;
+  low_stock_threshold: number;
+  instructions?: string | null;
 }
 
 export interface OcrResult {
   medicines: OcrMedicine[];
-  doctor_name: string;
-  hospital: string;
-  patient_name: string;
-  date: string;
+  doctor_name?: string;
+  hospital?: string;
+  patient_name?: string;
+  date?: string;
 }
 
 
@@ -79,37 +85,20 @@ function getAuthHeaders() {
 // SCAN PRESCRIPTION
 // ============================================================
 
-export async function scanPrescription(
+export const scanPrescription = async (
   file: File,
-): Promise<OcrResult> {
-  if (!file) {
-    throw new Error(
-      "Please select a prescription image.",
-    );
-  }
-
+): Promise<OcrResult> => {
   const formData = new FormData();
 
-  formData.append(
-    "file",
-    file,
-    file.name,
+  formData.append("file", file);
+
+  const response = await api.post<OcrResult>(
+    "/ocr/prescription",
+    formData,
   );
 
-  const response =
-    await axios.post<OcrResult>(
-      "http://localhost:8000/ocr/prescription",
-      formData,
-      {
-        timeout: 180000,
-        headers: {
-          ...getAuthHeaders(),
-        },
-      },
-    );
-
   return response.data;
-}
+};
 
 
 // ============================================================

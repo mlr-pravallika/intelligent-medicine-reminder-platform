@@ -4,9 +4,6 @@ const api = axios.create({
   baseURL:
     "https://intelligent-medicine-reminder-platform.onrender.com",
   timeout: 120000,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 api.interceptors.request.use(
@@ -16,6 +13,15 @@ api.interceptors.request.use(
     if (token) {
       config.headers = config.headers ?? {};
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // IMPORTANT:
+    // Do not force Content-Type for FormData requests.
+    // The browser must generate the multipart boundary automatically.
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    } else {
+      config.headers["Content-Type"] = "application/json";
     }
 
     return config;
