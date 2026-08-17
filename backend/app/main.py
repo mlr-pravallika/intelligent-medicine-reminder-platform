@@ -147,6 +147,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8080",
         "http://127.0.0.1:8080",
+        "https://mlr-pravallika-health-wise-ai-80.pravallikamarri55.workers.dev",
     ],
     allow_credentials=True,
     allow_methods=["*"],
