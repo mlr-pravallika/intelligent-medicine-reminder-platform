@@ -680,6 +680,7 @@ Time: ${currentReminder.reminder_time}`,
       try {
         await markTaken(
           dose.medicineId,
+          dose.reminder_time,
         );
 
         toast.success(
@@ -710,6 +711,7 @@ Time: ${currentReminder.reminder_time}`,
       try {
         await markMissed(
           dose.medicineId,
+          dose.reminder_time,
         );
 
         toast.success(
@@ -1390,6 +1392,7 @@ Time: ${currentReminder.reminder_time}`,
 
                 await markTaken(
                   currentReminder.id,
+                  currentReminder.reminder_time,
                 );
 
                 toast.success(
