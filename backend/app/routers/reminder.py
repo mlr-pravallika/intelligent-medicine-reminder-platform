@@ -1,3 +1,5 @@
+from http.client import HTTPException
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -16,29 +18,34 @@ router = APIRouter(prefix="/reminders", tags=["Reminders"])
 def mark_taken(
     medicine_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-
     medicine = (
         db.query(Medicine)
         .filter(
             Medicine.id == medicine_id,
-            Medicine.user_id == current_user.id
+            Medicine.user_id == current_user.id,
         )
         .first()
     )
 
     if not medicine:
-        return {"message": "Medicine not found"}
+        raise HTTPException(
+            status_code=404,
+            detail="Medicine not found",
+        )
 
-    medicine.remaining_quantity -= medicine.tablets_per_day
+    medicine.remaining_quantity = max(
+        0,
+        medicine.remaining_quantity - 1,
+    )
 
     history = ReminderHistory(
         user_id=current_user.id,
         medicine_name=medicine.medicine_name,
         dosage=medicine.dosage,
         reminder_time=medicine.reminder_time,
-        status="Taken"
+        status="Taken",
     )
 
     db.add(history)
@@ -46,66 +53,81 @@ def mark_taken(
     notification = Notification(
         user_id=current_user.id,
         title="Medicine Taken",
-        message=f"You have taken {medicine.medicine_name} ({medicine.dosage}).",
+        message=(
+            f"You have taken "
+            f"{medicine.medicine_name} "
+            f"({medicine.dosage})."
+        ),
         notification_type="Reminder",
         channel="App",
-        is_read=False
+        is_read=False,
     )
 
     db.add(notification)
+
     db.commit()
 
-    print("Sending reminder email...")
+    # Notification delivery must never make
+    # the medicine status operation fail.
+    try:
+        send_email(
+            receiver_email=current_user.email,
+            medicine_name=medicine.medicine_name,
+            dosage=medicine.dosage,
+            reminder_time=medicine.reminder_time,
+        )
+    except Exception as exc:
+        print(
+            "Email notification failed:",
+            repr(exc),
+        )
 
-    print("Current User ID:", current_user.id)
-    print("Current User Email:", current_user.email)
+    try:
+        send_sms(
+            current_user.phone,
+            current_user.name,
+            medicine.medicine_name,
+            medicine.dosage,
+            medicine.reminder_time,
+        )
+    except Exception as exc:
+        print(
+            "SMS notification failed:",
+            repr(exc),
+        )
 
-    send_email(
-        receiver_email=current_user.email,
-        medicine_name=medicine.medicine_name,
-        dosage=medicine.dosage,
-        reminder_time=medicine.reminder_time,
-    )
-
-    print("Current User Phone:", current_user.phone)
-
-    send_sms(
-        current_user.phone,
-        current_user.name,
-        medicine.medicine_name,
-        medicine.dosage,
-        medicine.reminder_time
-    )
-
-    print("send_email() finished")
-
-    return {"message": "Dose marked as taken"}
+    return {
+        "success": True,
+        "message": "Dose marked as taken",
+    }
 
 @router.post("/{medicine_id}/missed")
 def mark_missed(
     medicine_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-
     medicine = (
         db.query(Medicine)
         .filter(
             Medicine.id == medicine_id,
-            Medicine.user_id == current_user.id
+            Medicine.user_id == current_user.id,
         )
         .first()
     )
 
     if not medicine:
-        return {"message": "Medicine not found"}
+        raise HTTPException(
+            status_code=404,
+            detail="Medicine not found",
+        )
 
     history = ReminderHistory(
         user_id=current_user.id,
         medicine_name=medicine.medicine_name,
         dosage=medicine.dosage,
         reminder_time=medicine.reminder_time,
-        status="Missed"
+        status="Missed",
     )
 
     db.add(history)
@@ -113,37 +135,51 @@ def mark_missed(
     notification = Notification(
         user_id=current_user.id,
         title="Medicine Missed",
-        message=f"You missed {medicine.medicine_name} ({medicine.dosage}).",
+        message=(
+            f"You missed "
+            f"{medicine.medicine_name} "
+            f"({medicine.dosage})."
+        ),
         notification_type="Reminder",
         channel="App",
-        is_read=False
+        is_read=False,
     )
 
     db.add(notification)
+
     db.commit()
 
-    print("Sending reminder email...")
+    try:
+        send_email(
+            receiver_email=current_user.email,
+            medicine_name=medicine.medicine_name,
+            dosage=medicine.dosage,
+            reminder_time=medicine.reminder_time,
+        )
+    except Exception as exc:
+        print(
+            "Email notification failed:",
+            repr(exc),
+        )
 
-    send_email(
-        receiver_email=current_user.email,
-        medicine_name=medicine.medicine_name,
-        dosage=medicine.dosage,
-        reminder_time=medicine.reminder_time,
-    )
+    try:
+        send_sms(
+            current_user.phone,
+            current_user.name,
+            medicine.medicine_name,
+            medicine.dosage,
+            medicine.reminder_time,
+        )
+    except Exception as exc:
+        print(
+            "SMS notification failed:",
+            repr(exc),
+        )
 
-    print("Current User Phone:", current_user.phone)
-
-    send_sms(
-        current_user.phone,
-        current_user.name,
-        medicine.medicine_name,
-        medicine.dosage,
-        medicine.reminder_time
-    )
-
-    print("send_email() finished")
-
-    return {"message": "Dose marked as missed"}
+    return {
+        "success": True,
+        "message": "Dose marked as missed",
+    }
 
 @router.post("/{medicine_id}/snooze")
 def snooze_reminder(
