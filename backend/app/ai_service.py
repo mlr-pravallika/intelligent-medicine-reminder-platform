@@ -1,18 +1,15 @@
-
 """
 MediCare AI service.
 
-This file keeps the existing public functions used by the application,
-but makes Gemini calls more reliable and keeps assistant responses clean.
+Gemini configuration:
+Primary  : gemini-3.6-flash
+Fallback : gemini-3.5-flash-lite
 
-Primary model:
-    gemini-3.6-flash
-
-Fallback model:
-    gemini-3.5-flash-lite
-
-Both are stable Gemini API model IDs. The assistant uses the logged-in
-patient's medication records supplied by the route.
+The service is designed to:
+- retry temporary Gemini failures
+- automatically fall back to another model
+- keep assistant responses clean
+- keep medicine validation usable when Gemini is temporarily unavailable
 """
 
 import json
@@ -25,10 +22,14 @@ from google import genai
 from app.config import GEMINI_API_KEY
 
 
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
 if not GEMINI_API_KEY:
     raise RuntimeError(
         "GEMINI_API_KEY is not configured. "
-        "Add it to backend/.env and restart FastAPI."
+        "Add it to the backend environment."
     )
 
 
@@ -41,21 +42,24 @@ GENERAL_MODEL = "gemini-3.6-flash"
 FAST_MODEL = "gemini-3.5-flash-lite"
 
 
-def _clean_ai_text(value: Any) -> str:
-    """
-    Convert Gemini output into clean readable plain text.
+# ============================================================
+# TEXT CLEANING
+# ============================================================
 
-    We remove markdown/code formatting because the frontend assistant
-    is intentionally a simple conversational text UI.
-    """
+def _clean_ai_text(value: Any) -> str:
     text = str(value or "").strip()
 
+    if not text:
+        return ""
+
+    # Remove fenced code blocks.
     text = re.sub(
         r"```[\s\S]*?```",
         "",
         text,
     )
 
+    # Remove markdown links but keep visible text.
     text = re.sub(
         r"!\[([^\]]*)\]\([^)]+\)",
         r"\1",
@@ -68,6 +72,7 @@ def _clean_ai_text(value: Any) -> str:
         text,
     )
 
+    # Remove URLs.
     text = re.sub(
         r"https?://\S+",
         "",
@@ -75,12 +80,14 @@ def _clean_ai_text(value: Any) -> str:
         flags=re.IGNORECASE,
     )
 
+    # Remove common markdown symbols.
     text = re.sub(
         r"[*_`#~>|]+",
         "",
         text,
     )
 
+    # Remove bullet prefix.
     text = re.sub(
         r"^\s*[-•]\s+",
         "",
@@ -88,15 +95,16 @@ def _clean_ai_text(value: Any) -> str:
         flags=re.MULTILINE,
     )
 
+    # Normalize spaces.
     text = re.sub(
-        r"\s+([,.;!?])",
-        r"\1",
+        r"[ \t]+",
+        " ",
         text,
     )
 
     text = re.sub(
-        r"[ \t]+",
-        " ",
+        r"\s+([,.;!?])",
+        r"\1",
         text,
     )
 
@@ -109,18 +117,121 @@ def _clean_ai_text(value: Any) -> str:
     return text.strip()
 
 
+# ============================================================
+# JSON EXTRACTION
+# ============================================================
+
+def _extract_json(value: str) -> dict:
+    """
+    Extract a JSON object even if Gemini surrounds it with
+    extra whitespace, code fences, or explanation.
+    """
+
+    text = str(value or "").strip()
+
+    if not text:
+        raise ValueError(
+            "Empty Gemini response."
+        )
+
+    # Remove fenced JSON.
+    text = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    text = re.sub(
+        r"\s*```$",
+        "",
+        text,
+    )
+
+    text = text.strip()
+
+    # First try direct parsing.
+    try:
+        parsed = json.loads(text)
+
+        if isinstance(parsed, dict):
+            return parsed
+
+    except json.JSONDecodeError:
+        pass
+
+    # Try to locate the first JSON object.
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError(
+            "Gemini response did not contain valid JSON."
+        )
+
+    candidate = text[start : end + 1]
+
+    parsed = json.loads(candidate)
+
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            "Gemini JSON response was not an object."
+        )
+
+    return parsed
+
+
+# ============================================================
+# GEMINI GENERATION
+# ============================================================
+
+def _is_retryable_error(
+    error_text: str,
+) -> bool:
+    text = error_text.lower()
+
+    retry_keywords = (
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "unavailable",
+        "resource_exhausted",
+        "high demand",
+        "timeout",
+        "timed out",
+        "deadline",
+        "temporarily",
+        "overloaded",
+    )
+
+    return any(
+        keyword in text
+        for keyword in retry_keywords
+    )
+
+
+def _is_model_not_found_error(
+    error_text: str,
+) -> bool:
+    text = error_text.lower()
+
+    return (
+        "404" in text
+        or "not_found" in text
+        or "model" in text
+        and "not found" in text
+    )
+
+
 def _generate(
     prompt: str,
     *,
     models: list[str] | None = None,
     max_retries: int = 2,
 ) -> str:
-    """
-    Generate text with a small retry policy.
 
-    We deliberately avoid long exponential waiting because the patient
-    assistant is an interactive page.
-    """
     model_list = (
         models
         if models
@@ -133,13 +244,17 @@ def _generate(
     last_error: Exception | None = None
 
     for model_name in model_list:
+
         for attempt in range(
-            max_retries,
+            max_retries
         ):
+
             try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
+                response = (
+                    client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                    )
                 )
 
                 text = _clean_ai_text(
@@ -154,6 +269,7 @@ def _generate(
                     print(
                         f"Gemini success: {model_name}"
                     )
+
                     return text
 
                 raise RuntimeError(
@@ -161,26 +277,12 @@ def _generate(
                 )
 
             except Exception as exc:
+
                 last_error = exc
 
-                error_text = (
-                    str(exc).lower()
-                )
-
-                retryable = (
-                    "429" in error_text
-                    or "500" in error_text
-                    or "502" in error_text
-                    or "503" in error_text
-                    or "504" in error_text
-                    or "unavailable" in error_text
-                    or "resource_exhausted"
-                    in error_text
-                    or "high demand"
-                    in error_text
-                    or "deadline" in error_text
-                    or "timeout" in error_text
-                )
+                error_text = str(
+                    exc
+                ).lower()
 
                 print(
                     "Gemini error "
@@ -189,44 +291,68 @@ def _generate(
                     f"{exc}"
                 )
 
-                if (
-                    not retryable
-                    or attempt >=
-                    max_retries - 1
+                # If model itself is invalid,
+                # immediately move to fallback.
+                if _is_model_not_found_error(
+                    error_text
                 ):
                     break
 
-                time.sleep(
-                    1.0
-                )
+                # Temporary service problem.
+                if _is_retryable_error(
+                    error_text
+                ):
+                    if (
+                        attempt
+                        < max_retries - 1
+                    ):
+                        time.sleep(
+                            1.5 * (attempt + 1)
+                        )
+
+                    continue
+
+                # Non-retryable error:
+                # move directly to next model.
+                break
 
     raise RuntimeError(
         f"Gemini request failed: {last_error}"
     )
 
 
+# ============================================================
+# MEDICINE CONTEXT
+# ============================================================
+
 def _medicine_context(
     medicines,
 ) -> str:
+
     if not medicines:
         return (
             "No medicines are currently registered "
             "for this patient."
         )
 
-    blocks = []
+    blocks: list[str] = []
 
     for medicine in medicines:
+
         blocks.append(
             (
                 f"Medicine: {medicine.medicine_name}\n"
                 f"Dosage: {medicine.dosage}\n"
                 f"Frequency: {medicine.frequency}\n"
                 f"Reminder times: {medicine.reminder_time}\n"
-                f"Instructions: {medicine.instructions or 'Not recorded'}\n"
-                f"Remaining quantity: {medicine.remaining_quantity}\n"
-                f"Total quantity: {medicine.total_quantity}\n"
-                f"Tablets per day: {medicine.tablets_per_day}\n"
+                f"Instructions: "
+                f"{medicine.instructions or 'Not recorded'}\n"
+                f"Remaining quantity: "
+                f"{medicine.remaining_quantity}\n"
+                f"Total quantity: "
+                f"{medicine.total_quantity}\n"
+                f"Tablets per day: "
+                f"{medicine.tablets_per_day}\n"
                 f"Start date: {medicine.start_date}\n"
                 f"End date: {medicine.end_date}"
             )
@@ -237,19 +363,19 @@ def _medicine_context(
     )
 
 
+# ============================================================
+# LOCAL ASSISTANT FALLBACK
+# ============================================================
+
 def _local_assistant_fallback(
     question: str,
     medicines,
 ) -> str | None:
-    """
-    Useful deterministic answers for common questions.
 
-    This keeps the assistant useful even when Gemini is temporarily
-    unavailable and never pretends that an unavailable AI call succeeded.
-    """
     q = question.strip().lower()
 
     if not medicines:
+
         if (
             "medicine" in q
             or "medication" in q
@@ -273,8 +399,8 @@ def _local_assistant_fallback(
         )
     ):
         return (
-            f"You currently have {len(medicines)} "
-            "registered medicines."
+            f"You currently have "
+            f"{len(medicines)} registered medicines."
         )
 
     if (
@@ -315,9 +441,7 @@ def _local_assistant_fallback(
 
         return (
             "Your current reminder schedule is:\n"
-            + "\n".join(
-                lines
-            )
+            + "\n".join(lines)
         )
 
     if (
@@ -336,9 +460,7 @@ def _local_assistant_fallback(
 
         return (
             "Your current medicine quantities are:\n"
-            + "\n".join(
-                lines
-            )
+            + "\n".join(lines)
         )
 
     return None
@@ -352,6 +474,7 @@ def ask_ai(
     question,
     medicines,
 ):
+
     question = str(
         question or ""
     ).strip()
@@ -362,13 +485,14 @@ def ask_ai(
             "reminders, dosage or medication history."
         )
 
-    local_answer = _local_assistant_fallback(
-        question,
-        medicines,
+    local_answer = (
+        _local_assistant_fallback(
+            question,
+            medicines,
+        )
     )
 
     if local_answer is not None:
-        # Common account/data questions do not need a model call.
         return _clean_ai_text(
             local_answer
         )
@@ -388,14 +512,13 @@ User question:
 
 {question}
 
-Instructions:
+Rules:
 
-Answer the user's question using the patient's recorded medication
-information when it is relevant.
+Answer using the patient's recorded medication information when relevant.
 
-Use simple, professional English.
+Use simple professional English.
 
-Keep the answer concise and easy to read.
+Keep the answer concise.
 
 Do not use markdown headings, markdown bullets, tables, emojis,
 asterisks, backticks, or special formatting characters.
@@ -406,19 +529,20 @@ Do not diagnose diseases.
 
 Do not prescribe new medicines.
 
-Do not change a patient's recorded dosage or treatment plan.
+Do not change the recorded dosage or treatment plan.
 
-Do not invent information that is missing from the patient's records.
+Do not invent information.
 
-For questions about missed doses, say that the patient should follow
-the instructions on their prescription or contact their doctor or
-pharmacist when the correct action is not known from the records.
+For missed-dose questions, follow the prescription or advise the user
+to contact a doctor or pharmacist when the correct action is not known
+from the records.
 
-For medicine safety questions, provide general information and clearly
-state when professional medical advice is needed.
+For safety questions, provide general information and state when
+professional medical advice is needed.
 """
 
     try:
+
         return _generate(
             prompt,
             models=[
@@ -429,17 +553,16 @@ state when professional medical advice is needed.
         )
 
     except Exception as exc:
+
         print(
             "AI Assistant error:",
             repr(exc),
         )
 
-        # Do not hide the real situation behind a vague success-looking
-        # response. Return a clear temporary-service message.
         return (
             "The AI assistant is temporarily unavailable. "
             "Your saved medicine data is still available. "
-            "Please try the question again in a moment."
+            "Please try again shortly."
         )
 
 
@@ -450,11 +573,13 @@ state when professional medical advice is needed.
 def validate_medicine_name(
     name: str,
 ) -> dict:
+
     medicine_name = (
         name or ""
     ).strip()
 
     if not medicine_name:
+
         return {
             "valid": False,
             "available": True,
@@ -466,8 +591,8 @@ def validate_medicine_name(
         }
 
     prompt = f"""
-Determine whether this is a real medicine, pharmaceutical drug,
-or recognized medicine brand.
+Determine whether the following is a real medicine,
+pharmaceutical drug, or recognized medicine brand.
 
 Medicine name:
 {medicine_name}
@@ -476,12 +601,13 @@ Rules:
 Generic names are valid.
 Brand names are valid.
 Indian and international medicine brands are valid.
-Reject random text, foods, symptoms, diseases, names or nonsense.
-Do not invent a medicine.
+Do not reject a valid brand merely because it is not a generic name.
+Reject random text, food names, symptoms, diseases, person names,
+or obvious nonsense.
 Do not recommend treatment.
 Do not determine dosage.
 
-Return only JSON:
+Return ONLY a JSON object in exactly this form:
 
 {{
   "valid": true,
@@ -491,30 +617,18 @@ Return only JSON:
 """
 
     try:
+
         raw = _generate(
             prompt,
             models=[
                 FAST_MODEL,
                 GENERAL_MODEL,
             ],
-            max_retries=1,
+            max_retries=2,
         )
 
-        cleaned = re.sub(
-            r"^```(?:json)?\s*",
-            "",
-            raw,
-            flags=re.IGNORECASE,
-        )
-
-        cleaned = re.sub(
-            r"\s*```$",
-            "",
-            cleaned,
-        )
-
-        parsed = json.loads(
-            cleaned
+        parsed = _extract_json(
+            raw
         )
 
         valid = bool(
@@ -531,9 +645,12 @@ Return only JSON:
             "message": str(
                 parsed.get(
                     "message",
-                    "Medicine recognized."
-                    if valid
-                    else "The entered name was not recognized as a medicine.",
+                    (
+                        "Medicine recognized."
+                        if valid
+                        else
+                        "The entered name was not recognized as a medicine."
+                    ),
                 )
             ),
             "suggestion": parsed.get(
@@ -542,17 +659,22 @@ Return only JSON:
         }
 
     except Exception as exc:
+
         print(
             "Medicine validation unavailable:",
             repr(exc),
         )
 
+        # Important:
+        # Gemini being temporarily unavailable
+        # must NOT block adding a medicine.
         return {
-            "valid": False,
+            "valid": True,
             "available": False,
             "medicine_name": medicine_name,
             "message": (
-                "AI medicine verification is temporarily unavailable."
+                "AI verification is temporarily unavailable. "
+                "You can continue after reviewing the medicine name."
             ),
             "suggestion": None,
         }
@@ -579,7 +701,7 @@ Food interactions
 
 Do not prescribe dosage.
 Do not diagnose.
-Use plain text without markdown.
+Use plain text only.
 """
 
     try:
@@ -589,8 +711,9 @@ Use plain text without markdown.
                 GENERAL_MODEL,
                 FAST_MODEL,
             ],
-            max_retries=1,
+            max_retries=2,
         )
+
     except Exception:
         return (
             "The AI service is temporarily unavailable."
@@ -598,6 +721,7 @@ Use plain text without markdown.
 
 
 def health_tip():
+
     prompt = """
 Give one general medicine safety tip in no more than 40 words.
 Use plain text only.
@@ -610,8 +734,9 @@ Use plain text only.
                 FAST_MODEL,
                 GENERAL_MODEL,
             ],
-            max_retries=1,
+            max_retries=2,
         )
+
     except Exception:
         return (
             "Take medicines only according to the instructions "
@@ -623,6 +748,7 @@ def dosage_explanation(
     name,
     dosage,
 ):
+
     prompt = f"""
 Explain this recorded dosage in simple English.
 
@@ -640,8 +766,9 @@ Use plain text only.
                 FAST_MODEL,
                 GENERAL_MODEL,
             ],
-            max_retries=1,
+            max_retries=2,
         )
+
     except Exception:
         return (
             "The AI service is temporarily unavailable."
@@ -653,6 +780,7 @@ def refill_reason(
     remaining,
     tablets,
 ):
+
     prompt = f"""
 Medicine: {name}
 Remaining tablets: {remaining}
@@ -673,8 +801,9 @@ Use plain text only.
                 FAST_MODEL,
                 GENERAL_MODEL,
             ],
-            max_retries=1,
+            max_retries=2,
         )
+
     except Exception:
         return (
             "The AI service is temporarily unavailable."
@@ -685,6 +814,7 @@ def reminder_text(
     name,
     time,
 ):
+
     prompt = f"""
 Write a friendly medicine reminder.
 
@@ -702,8 +832,9 @@ Plain text only.
                 FAST_MODEL,
                 GENERAL_MODEL,
             ],
-            max_retries=1,
+            max_retries=2,
         )
+
     except Exception:
         return (
             f"Reminder: take {name} at {time} "
@@ -714,6 +845,7 @@ Plain text only.
 def missed_dose(
     name,
 ):
+
     prompt = f"""
 The patient says they missed a dose of {name}.
 
@@ -730,8 +862,9 @@ Use plain text only.
                 GENERAL_MODEL,
                 FAST_MODEL,
             ],
-            max_retries=1,
+            max_retries=2,
         )
+
     except Exception:
         return (
             "Follow the missed-dose instructions on your prescription "
