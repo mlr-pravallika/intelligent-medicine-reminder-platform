@@ -1,228 +1,259 @@
 import os
 import smtplib
 
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
+EMAIL_ADDRESS = os.getenv(
+    "EMAIL_ADDRESS",
+    "",
+).strip()
+
+EMAIL_PASSWORD = os.getenv(
+    "EMAIL_PASSWORD",
+    "",
+).strip()
+
+
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+
+
+def _validate_email_config() -> None:
+    if not EMAIL_ADDRESS:
+        raise RuntimeError(
+            "EMAIL_ADDRESS is not configured."
+        )
+
+    if not EMAIL_PASSWORD:
+        raise RuntimeError(
+            "EMAIL_PASSWORD is not configured."
+        )
+
+
+def _send_html_email(
+    receiver_email: str,
+    subject: str,
+    html: str,
+) -> bool:
+
+    _validate_email_config()
+
+    message = MIMEMultipart("alternative")
+
+    message["From"] = (
+        f"MediCare AI <{EMAIL_ADDRESS}>"
+    )
+
+    message["To"] = receiver_email
+    message["Subject"] = subject
+
+    message.attach(
+        MIMEText(
+            html,
+            "html",
+            "utf-8",
+        )
+    )
+
+    server = None
+
+    try:
+        print(
+            "Connecting to Gmail SMTP..."
+        )
+
+        server = smtplib.SMTP(
+            SMTP_HOST,
+            SMTP_PORT,
+            timeout=30,
+        )
+
+        server.ehlo()
+
+        server.starttls()
+
+        server.ehlo()
+
+        print(
+            "Logging into Gmail..."
+        )
+
+        server.login(
+            EMAIL_ADDRESS,
+            EMAIL_PASSWORD,
+        )
+
+        print(
+            f"Sending email to {receiver_email}..."
+        )
+
+        server.sendmail(
+            EMAIL_ADDRESS,
+            [receiver_email],
+            message.as_string(),
+        )
+
+        print(
+            f"Email sent successfully to {receiver_email}"
+        )
+
+        return True
+
+    except Exception as exc:
+        print(
+            "EMAIL ERROR:",
+            type(exc).__name__,
+            str(exc),
+        )
+
+        return False
+
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
 
 def send_email(
     receiver_email: str,
     medicine_name: str,
     dosage: str,
-    reminder_time: str
-):
-    """
-    Sends a medicine reminder email.
-    """
+    reminder_time: str,
+) -> bool:
 
-    subject = f"MediCare AI | Reminder | {medicine_name}"
+    subject = (
+        f"MediCare AI | Medicine Reminder | "
+        f"{medicine_name}"
+    )
 
     html = f"""
     <html>
-
-    <body style="background:#f4f8fb;
-    font-family:Arial,sans-serif;
-    padding:30px;">
+    <body style="
+        background:#f4f8fb;
+        font-family:Arial,sans-serif;
+        padding:30px;
+    ">
 
     <div style="
-    max-width:650px;
-    margin:auto;
-    background:white;
-    border-radius:16px;
-    padding:35px;
-    box-shadow:0 10px 30px rgba(0,0,0,.08);
+        max-width:650px;
+        margin:auto;
+        background:white;
+        border-radius:16px;
+        padding:35px;
+        box-shadow:0 10px 30px rgba(0,0,0,.08);
     ">
 
-    <h1 style="color:#0077ff;">
-    💊 MediCare AI
-    </h1>
+        <h1 style="color:#0077ff;">
+            MediCare AI
+        </h1>
 
-    <p style="color:#666;">
-    Medication Intelligence Platform
-    </p>
+        <p style="color:#666;">
+            Medication Intelligence Platform
+        </p>
 
-    <hr>
+        <hr>
 
-    <h2 style="color:#1f2937;">
-    Medicine Reminder
-    </h2>
+        <h2 style="color:#1f2937;">
+            Medicine Reminder
+        </h2>
 
-    <p>
-    Hello <b>{receiver_email}</b>,
-    </p>
+        <p>
+            Hello,
+        </p>
 
-    <p>
-    It's time to take your medicine.
-    Please don't skip today's dose.
-    </p>
+        <p>
+            It is time to take your medicine.
+        </p>
 
-    <table
-    style="
-    width:100%;
-    margin-top:20px;
-    border-collapse:collapse;
-    ">
+        <table style="
+            width:100%;
+            margin-top:20px;
+            border-collapse:collapse;
+        ">
 
-    <tr>
+            <tr>
+                <td style="padding:12px;">
+                    <b>Medicine</b>
+                </td>
 
-    <td style="padding:14px;">
-    💊
-    </td>
+                <td style="padding:12px;">
+                    {medicine_name}
+                </td>
+            </tr>
 
-    <td>
+            <tr>
+                <td style="padding:12px;">
+                    <b>Dosage</b>
+                </td>
 
-    <b>Medicine</b><br>
+                <td style="padding:12px;">
+                    {dosage}
+                </td>
+            </tr>
 
-    {medicine_name}
+            <tr>
+                <td style="padding:12px;">
+                    <b>Reminder Time</b>
+                </td>
 
-    </td>
+                <td style="padding:12px;">
+                    {reminder_time}
+                </td>
+            </tr>
 
-    </tr>
+        </table>
 
-    <tr>
+        <div style="
+            margin-top:20px;
+            background:#edf8ff;
+            padding:15px;
+            border-left:5px solid #0ea5e9;
+            border-radius:8px;
+        ">
+            Please follow the medication instructions
+            provided by your healthcare professional.
+        </div>
 
-    <td style="padding:14px;">
-    💉
-    </td>
+        <hr style="margin-top:25px;">
 
-    <td>
-
-    <b>Dosage</b><br>
-
-    {dosage}
-
-    </td>
-
-    </tr>
-
-    <tr>
-
-    <td style="padding:14px;">
-    ⏰
-    </td>
-
-    <td>
-
-    <b>Reminder Time</b><br>
-
-    {reminder_time}
-
-    </td>
-
-    </tr>
-
-    </table>
-
-    <br>
-
-    <div
-    style="
-    background:#edf8ff;
-    padding:15px;
-    border-left:5px solid #0ea5e9;
-    border-radius:8px;
-    ">
-
-    ⚠️ Missing medicines may affect your treatment.
-
-    </div>
-
-    <br>
-
-    <a
-    href="http://localhost:8080/patient"
-    style="
-    background:#0ea5e9;
-    padding:14px 24px;
-    color:white;
-    text-decoration:none;
-    border-radius:8px;
-    font-weight:bold;
-    display:inline-block;
-    ">
-
-    Open MediCare AI Dashboard
-
-    </a>
-
-    <br><br>
-
-    <hr>
-
-    <p style="color:#888;font-size:13px;">
-
-    This reminder was generated automatically by
-    <b>MediCare AI</b>.
-
-    <br>
-
-    Stay Healthy ❤️
-
-    </p>
+        <p style="
+            color:#888;
+            font-size:13px;
+        ">
+            This reminder was generated automatically
+            by MediCare AI.
+        </p>
 
     </div>
 
     </body>
-
     </html>
     """
 
-    message = MIMEMultipart()
+    return _send_html_email(
+        receiver_email=receiver_email,
+        subject=subject,
+        html=html,
+    )
 
-    message["From"] = f"MediCare AI <{EMAIL_ADDRESS}>"
-    message["To"] = receiver_email
-    message["Subject"] = subject
-
-    message.attach(MIMEText(html, "html"))
-
-    try:
-        print("Connecting to Gmail SMTP...")
-
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-
-        print("Logging in...")
-
-        print("Sender:", EMAIL_ADDRESS)
-        print("Receiver:", receiver_email)
-
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-
-        print("Sending email to:", receiver_email)
-
-        server.sendmail(
-            EMAIL_ADDRESS,
-            receiver_email,
-            message.as_string()
-        )
-
-        print(message.as_string())
-
-        server.quit()
-
-        print("Email sent successfully!")
-
-    except Exception as e:
-        print("EMAIL ERROR:")
-        print(type(e).__name__)
-        print(str(e))
 
 def send_verification_code_email(
     receiver_email: str,
-    verification_code: str
+    verification_code: str,
 ) -> bool:
-    """
-    Sends a password-reset verification code.
-    """
 
-    subject = "MediCare AI | Password Reset Verification Code"
+    subject = (
+        "MediCare AI | Password Reset Verification Code"
+    )
 
     html = f"""
     <html>
@@ -238,25 +269,18 @@ def send_verification_code_email(
         background:white;
         border-radius:16px;
         padding:35px;
-        box-shadow:0 10px 30px rgba(0,0,0,.08);
     ">
 
         <h1 style="color:#0077ff;">
-            💊 MediCare AI
+            MediCare AI
         </h1>
 
-        <p style="color:#666;">
+        <h2>
             Password Reset Verification
-        </p>
-
-        <hr>
-
-        <h2 style="color:#1f2937;">
-            Verification Code
         </h2>
 
         <p>
-            Use the verification code below to reset your password:
+            Your verification code is:
         </p>
 
         <div style="
@@ -265,7 +289,6 @@ def send_verification_code_email(
             text-align:center;
             background:#eff6ff;
             border-radius:12px;
-            border:1px solid #bfdbfe;
         ">
 
             <span style="
@@ -280,22 +303,11 @@ def send_verification_code_email(
         </div>
 
         <p>
-            This code will expire in <b>10 minutes</b>.
+            This code expires in 10 minutes.
         </p>
 
         <p style="color:#dc2626;">
             Do not share this code with anyone.
-        </p>
-
-        <hr>
-
-        <p style="color:#888;font-size:13px;">
-            If you did not request a password reset, you can safely ignore
-            this email.
-        </p>
-
-        <p style="color:#888;font-size:13px;">
-            MediCare AI — Intelligent Medication Management
         </p>
 
     </div>
@@ -304,66 +316,24 @@ def send_verification_code_email(
     </html>
     """
 
-    message = MIMEMultipart()
-
-    message["From"] = f"MediCare AI <{EMAIL_ADDRESS}>"
-    message["To"] = receiver_email
-    message["Subject"] = subject
-
-    message.attach(
-        MIMEText(html, "html")
+    return _send_html_email(
+        receiver_email=receiver_email,
+        subject=subject,
+        html=html,
     )
-
-    try:
-
-        server = smtplib.SMTP(
-            "smtp.gmail.com",
-            587
-        )
-
-        server.starttls()
-
-        server.login(
-            EMAIL_ADDRESS,
-            EMAIL_PASSWORD
-        )
-
-        server.sendmail(
-            EMAIL_ADDRESS,
-            receiver_email,
-            message.as_string()
-        )
-
-        server.quit()
-
-        print(
-            f"Password reset code sent to {receiver_email}"
-        )
-
-        return True
-
-    except Exception as e:
-
-        print("PASSWORD RESET EMAIL ERROR:")
-        print(type(e).__name__)
-        print(str(e))
-
-        return False
 
 
 def send_password_reset_success_email(
-    receiver_email: str
+    receiver_email: str,
 ) -> bool:
-    """
-    Sends a confirmation after a successful password reset.
-    """
 
-    subject = "MediCare AI | Password Changed Successfully"
+    subject = (
+        "MediCare AI | Password Changed Successfully"
+    )
 
-    html = f"""
+    html = """
     <html>
     <body style="
-        background:#f4f8fb;
         font-family:Arial,sans-serif;
         padding:30px;
     ">
@@ -371,14 +341,13 @@ def send_password_reset_success_email(
     <div style="
         max-width:600px;
         margin:auto;
+        padding:35px;
         background:white;
         border-radius:16px;
-        padding:35px;
-        box-shadow:0 10px 30px rgba(0,0,0,.08);
     ">
 
         <h1 style="color:#0077ff;">
-            💊 MediCare AI
+            MediCare AI
         </h1>
 
         <h2>
@@ -386,16 +355,8 @@ def send_password_reset_success_email(
         </h2>
 
         <p>
-            Your MediCare AI account password was successfully changed.
-        </p>
-
-        <p>
-            You can now sign in using your new password.
-        </p>
-
-        <p style="color:#dc2626;">
-            If you did not make this change, contact the administrator
-            immediately.
+            Your MediCare AI account password was
+            successfully changed.
         </p>
 
     </div>
@@ -404,44 +365,8 @@ def send_password_reset_success_email(
     </html>
     """
 
-    message = MIMEMultipart()
-
-    message["From"] = f"MediCare AI <{EMAIL_ADDRESS}>"
-    message["To"] = receiver_email
-    message["Subject"] = subject
-
-    message.attach(
-        MIMEText(html, "html")
+    return _send_html_email(
+        receiver_email=receiver_email,
+        subject=subject,
+        html=html,
     )
-
-    try:
-
-        server = smtplib.SMTP(
-            "smtp.gmail.com",
-            587
-        )
-
-        server.starttls()
-
-        server.login(
-            EMAIL_ADDRESS,
-            EMAIL_PASSWORD
-        )
-
-        server.sendmail(
-            EMAIL_ADDRESS,
-            receiver_email,
-            message.as_string()
-        )
-
-        server.quit()
-
-        return True
-
-    except Exception as e:
-
-        print("PASSWORD RESET CONFIRMATION ERROR:")
-        print(type(e).__name__)
-        print(str(e))
-
-        return False        
