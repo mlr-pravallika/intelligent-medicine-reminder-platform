@@ -33,7 +33,7 @@ except (ImportError, Exception) as exc:
     )
 
 
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-3.6-flash"  # Stable Gemini Vision model for prescription OCR.
 
 
 def _empty_result() -> dict:

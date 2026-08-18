@@ -9,7 +9,7 @@ client = genai.Client(
 )
 
 response = client.models.generate_content(
-    model="gemini-flash-latest",
+    model="gemini-3.6-flash",
     contents="Hello"
 )
 

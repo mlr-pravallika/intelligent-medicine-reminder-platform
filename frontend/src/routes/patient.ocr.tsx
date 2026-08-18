@@ -1,5 +1,3 @@
-import axios from "axios";
-
 import {
   ChangeEvent,
   useEffect,
@@ -20,13 +18,7 @@ import {
 
 import { toast } from "sonner";
 
-import {
-  scanPrescription,
-  saveOcrMedicines,
-  type OcrMedicine,
-  type OcrResult,
-  type SaveOcrMedicine,
-} from "@/services/ocrService";
+import api from "@/services/api";
 
 import { SectionHeading } from "@/components/portal/stat-card";
 
@@ -52,9 +44,34 @@ export const Route = createFileRoute(
       },
     ],
   }),
-
   component: PrescriptionOcrPage,
 });
+
+
+type ApiMedicine = {
+  medicine_name?: string;
+  dosage?: string;
+  frequency?: string;
+  duration?: string;
+  instructions?: string | null;
+  reminder_time?: string;
+  reminder_times?: string[] | string;
+  quantity?: number | null;
+  total_quantity?: number | null;
+  remaining_quantity?: number | null;
+  start_date?: string;
+  end_date?: string;
+  low_stock_threshold?: number;
+};
+
+
+type OcrResponse = {
+  medicines?: ApiMedicine[];
+  doctor_name?: string;
+  hospital?: string;
+  patient_name?: string;
+  date?: string;
+};
 
 
 type EditableMedicine = {
@@ -71,7 +88,7 @@ type EditableMedicine = {
 };
 
 
-const EMPTY_RESULT: OcrResult = {
+const EMPTY_RESULT: OcrResponse = {
   medicines: [],
   doctor_name: "",
   hospital: "",
@@ -105,12 +122,48 @@ function addDays(
 }
 
 
+function getDurationDays(
+  duration: string,
+): number {
+  const value =
+    duration.trim().toLowerCase();
+
+  const numberMatch =
+    value.match(/\d+/);
+
+  const number =
+    numberMatch
+      ? Number(numberMatch[0])
+      : 1;
+
+  if (value.includes("week")) {
+    return Math.max(
+      1,
+      number * 7,
+    );
+  }
+
+  if (value.includes("month")) {
+    return Math.max(
+      1,
+      number * 30,
+    );
+  }
+
+  return Math.max(
+    1,
+    number,
+  );
+}
+
+
 function frequencyDefaults(
   frequency: string,
 ): string[] {
-  const lower = (
-    frequency || ""
-  ).toLowerCase();
+  const lower =
+    frequency
+      .trim()
+      .toLowerCase();
 
   if (
     lower.includes("three") ||
@@ -119,7 +172,7 @@ function frequencyDefaults(
     return [
       "09:00",
       "14:00",
-      "20:00",
+      "21:00",
     ];
   }
 
@@ -137,109 +190,126 @@ function frequencyDefaults(
 }
 
 
-function getDurationDays(
-  duration: string,
-): number {
-  const match =
-    (duration || "").match(
-      /(\d+)\s*days?/i,
-    );
+function normalizeReminderTimes(
+  value:
+    | string[]
+    | string
+    | undefined,
+  frequency: string,
+): string[] {
+  let times: string[] = [];
 
-  return match
-    ? Number(match[1])
-    : 30;
+  if (Array.isArray(value)) {
+    times = value
+      .map((item) =>
+        String(item).trim(),
+      )
+      .filter(Boolean);
+  } else if (
+    typeof value === "string"
+  ) {
+    times = value
+      .split(",")
+      .map((item) =>
+        item.trim(),
+      )
+      .filter(Boolean);
+  }
+
+  if (times.length > 0) {
+    return times.slice(0, 3);
+  }
+
+  return frequencyDefaults(
+    frequency,
+  );
 }
 
 
 function toEditableMedicine(
-  medicine: OcrMedicine,
+  medicine: ApiMedicine,
 ): EditableMedicine {
-  const start = todayString();
+  const start =
+    medicine.start_date ||
+    todayString();
 
   const frequency =
-    medicine.frequency ||
+    medicine.frequency?.trim() ||
     "Once daily";
 
+  const duration =
+    medicine.duration?.trim() ||
+    "";
+
   const reminderTimes =
-    medicine.reminder_times &&
-    medicine.reminder_times.length > 0
-      ? medicine.reminder_times
-      : frequencyDefaults(
-          frequency,
-        );
+    normalizeReminderTimes(
+      medicine.reminder_times ??
+        medicine.reminder_time,
+      frequency,
+    );
+
+  const quantityValue =
+    medicine.total_quantity ??
+    medicine.quantity ??
+    30;
 
   const quantity =
-    medicine.quantity &&
-    medicine.quantity > 0
-      ? String(
-          medicine.quantity,
-        )
+    Number(quantityValue) > 0
+      ? String(quantityValue)
       : "30";
+
+  const lowStockValue =
+    medicine.low_stock_threshold ??
+    5;
 
   return {
     medicine_name:
-      medicine.medicine_name || "",
+      medicine.medicine_name?.trim() ||
+      "",
 
     dosage:
-      medicine.dosage || "",
+      medicine.dosage?.trim() ||
+      "",
 
     frequency,
 
-    duration:
-      medicine.duration || "",
+    duration,
 
     instructions:
-      medicine.instructions || "",
+      medicine.instructions?.trim() ||
+      "",
 
     reminder_times:
-      [...reminderTimes],
+      reminderTimes,
 
     quantity,
 
-    start_date: start,
-
-    end_date: addDays(
+    start_date:
       start,
-      getDurationDays(
-        medicine.duration || "",
+
+    end_date:
+      medicine.end_date ||
+      addDays(
+        start,
+        getDurationDays(
+          duration,
+        ),
       ),
-    ),
 
     low_stock_threshold:
-      "5",
+      String(
+        Math.max(
+          1,
+          Math.min(
+            Number(lowStockValue) || 5,
+            Math.max(
+              1,
+              Number(quantity) - 1,
+            ),
+          ),
+        ),
+      ),
   };
-}
-
-
-function formatTime(
-  value: string,
-): string {
-  const match =
-    value.match(
-      /^(\d{2}):(\d{2})$/,
-    );
-
-  if (!match) {
-    return value;
-  }
-
-  const hour =
-    Number(match[1]);
-
-  const suffix =
-    hour >= 12
-      ? "PM"
-      : "AM";
-
-  const hour12 =
-    hour % 12 || 12;
-
-  return `${String(
-    hour12,
-  ).padStart(
-    2,
-    "0",
-  )}:${match[2]} ${suffix}`;
 }
 
 
@@ -249,62 +319,68 @@ function getErrorMessage(
   const axiosError =
     error as {
       response?: {
+        status?: number;
         data?: {
           detail?: unknown;
+          message?: unknown;
         };
       };
       message?: string;
     };
 
+  const responseData =
+    axiosError.response?.data;
+
   const detail =
-    axiosError.response?.data
-      ?.detail;
+    responseData?.detail;
 
   if (
-    typeof detail === "string"
+    typeof detail ===
+    "string"
   ) {
     return detail;
   }
 
-  if (Array.isArray(detail)) {
-    const messages = detail
-      .map((item: unknown) => {
-        if (
-          item &&
-          typeof item === "object" &&
-          "msg" in item
-        ) {
-          return String(
-            (
-              item as {
-                msg?: unknown;
-              }
-            ).msg || "",
-          );
-        }
+  if (
+    Array.isArray(detail)
+  ) {
+    const messages =
+      detail
+        .map(
+          (item) => {
+            if (
+              item &&
+              typeof item ===
+                "object" &&
+              "msg" in item
+            ) {
+              return String(
+                (
+                  item as {
+                    msg?: unknown;
+                  }
+                ).msg ??
+                  "",
+              );
+            }
 
-        return "";
-      })
-      .filter(Boolean);
+            return "";
+          },
+        )
+        .filter(Boolean);
 
-    if (messages.length > 0) {
-      return messages.join(" ");
+    if (messages.length) {
+      return messages.join(
+        " ",
+      );
     }
   }
 
   if (
-    detail &&
-    typeof detail === "object" &&
-    "msg" in detail
+    typeof responseData?.message ===
+    "string"
   ) {
-    return String(
-      (
-        detail as {
-          msg?: unknown;
-        }
-      ).msg ||
-        "Something went wrong.",
-    );
+    return responseData.message;
   }
 
   return (
@@ -316,33 +392,47 @@ function getErrorMessage(
 
 function PrescriptionOcrPage() {
   const inputRef =
-    useRef<HTMLInputElement>(null);
+    useRef<HTMLInputElement>(
+      null,
+    );
 
-  const [file, setFile] =
-    useState<File | null>(null);
+  const [
+    file,
+    setFile,
+  ] = useState<File | null>(
+    null,
+  );
 
-  const [preview, setPreview] =
-    useState<string | null>(null);
+  const [
+    preview,
+    setPreview,
+  ] = useState<string | null>(
+    null,
+  );
 
-  const [scanning, setScanning] =
-    useState(false);
+  const [
+    scanning,
+    setScanning,
+  ] = useState(false);
 
-  const [saving, setSaving] =
-    useState(false);
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
 
   const [
     result,
     setResult,
-  ] = useState<OcrResult>(
+  ] = useState<OcrResponse>(
     EMPTY_RESULT,
   );
 
   const [
     medicines,
     setMedicines,
-  ] = useState<EditableMedicine[]>(
-    [],
-  );
+  ] = useState<
+    EditableMedicine[]
+  >([]);
 
 
   useEffect(() => {
@@ -356,122 +446,145 @@ function PrescriptionOcrPage() {
   }, [preview]);
 
 
-  const chooseFile = async (
-    selectedFile: File,
-  ) => {
-    if (
-      !selectedFile.type.startsWith(
-        "image/",
-      )
-    ) {
-      toast.error(
-        "Please select a prescription image.",
-      );
-      return;
-    }
-
-    if (preview) {
-      URL.revokeObjectURL(
-        preview,
-      );
-    }
-
-    setFile(selectedFile);
-
-    setPreview(
-      URL.createObjectURL(
-        selectedFile,
-      ),
-    );
-
-    try {
-      setScanning(true);
-
-      const data =
-        await scanPrescription(
-          selectedFile,
-        );
-
-      const safeResult: OcrResult = {
-        medicines:
-          Array.isArray(
-            data?.medicines,
-          )
-            ? data.medicines
-            : [],
-        doctor_name:
-          data?.doctor_name || "",
-        hospital:
-          data?.hospital || "",
-        patient_name:
-          data?.patient_name || "",
-        date:
-          data?.date || "",
-      };
-
-      setResult(safeResult);
-
-      const extracted =
-        safeResult.medicines.map(
-          toEditableMedicine,
-        );
-
-      setMedicines(extracted);
-
-      if (extracted.length === 0) {
-        toast.warning(
-          "The prescription was read, but no medicines were detected.",
+  const chooseFile =
+    async (
+      selectedFile: File,
+    ) => {
+      if (
+        !selectedFile.type.startsWith(
+          "image/",
+        )
+      ) {
+        toast.error(
+          "Please select a prescription image.",
         );
         return;
       }
 
-      toast.success(
-        `${extracted.length} medicine${
-          extracted.length === 1
-            ? ""
-            : "s"
-        } detected.`,
+      if (preview) {
+        URL.revokeObjectURL(
+          preview,
+        );
+      }
+
+      setFile(
+        selectedFile,
       );
 
-    } catch (error) {
-      console.error(
-        "Prescription OCR error:",
-        error,
-      );
-
-      toast.error(
-        getErrorMessage(
-          error,
+      setPreview(
+        URL.createObjectURL(
+          selectedFile,
         ),
       );
 
-    } finally {
-      setScanning(false);
-    }
-  };
+      setResult(
+        EMPTY_RESULT,
+      );
+
+      setMedicines([]);
+
+      try {
+        setScanning(true);
+
+        const formData =
+          new FormData();
+
+        formData.append(
+          "file",
+          selectedFile,
+        );
+
+        const response =
+          await api.post<OcrResponse>(
+            "/ocr/prescription",
+            formData,
+            {
+              timeout: 120000,
+            },
+          );
+
+        const safeResult =
+          response.data ?? {
+            ...EMPTY_RESULT,
+          };
+
+        const extracted =
+          Array.isArray(
+            safeResult.medicines,
+          )
+            ? safeResult.medicines
+                .map(
+                  toEditableMedicine,
+                )
+            : [];
+
+        setResult(
+          safeResult,
+        );
+
+        setMedicines(
+          extracted,
+        );
+
+        if (
+          extracted.length === 0
+        ) {
+          toast.warning(
+            "The prescription was read, but no medicines were detected.",
+          );
+          return;
+        }
+
+        toast.success(
+          `${extracted.length} medicine${
+            extracted.length === 1
+              ? ""
+              : "s"
+          } detected.`,
+        );
+      } catch (error) {
+        console.error(
+          "Prescription OCR error:",
+          error,
+        );
+
+        toast.error(
+          getErrorMessage(
+            error,
+          ),
+        );
+      } finally {
+        setScanning(false);
+      }
+    };
 
 
-  const handleFileChange = (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const selected =
-      event.target.files?.[0];
+  const handleFileChange =
+    (
+      event:
+        ChangeEvent<HTMLInputElement>,
+    ) => {
+      const selected =
+        event.target.files?.[0];
 
-    if (selected) {
-      void chooseFile(selected);
-    }
+      if (selected) {
+        void chooseFile(
+          selected,
+        );
+      }
 
-    event.target.value = "";
-  };
+      event.target.value = "";
+    };
 
 
   const updateMedicine = (
     index: number,
-    field: keyof EditableMedicine,
+    field:
+      keyof EditableMedicine,
     value: string,
   ) => {
     setMedicines(
-      current =>
+      (current) =>
         current.map(
           (
             medicine,
@@ -480,8 +593,7 @@ function PrescriptionOcrPage() {
             medicineIndex === index
               ? {
                   ...medicine,
-                  [field]:
-                    value,
+                  [field]: value,
                 }
               : medicine,
         ),
@@ -489,49 +601,50 @@ function PrescriptionOcrPage() {
   };
 
 
-  const updateReminderTime = (
-    medicineIndex: number,
-    timeIndex: number,
-    value: string,
-  ) => {
-    setMedicines(
-      current =>
-        current.map(
-          (
-            medicine,
-            index,
-          ) => {
-            if (
-              index !==
-              medicineIndex
-            ) {
-              return medicine;
-            }
+  const updateReminderTime =
+    (
+      medicineIndex: number,
+      timeIndex: number,
+      value: string,
+    ) => {
+      setMedicines(
+        (current) =>
+          current.map(
+            (
+              medicine,
+              index,
+            ) => {
+              if (
+                index !==
+                medicineIndex
+              ) {
+                return medicine;
+              }
 
-            const times = [
-              ...medicine.reminder_times,
-            ];
+              const times = [
+                ...medicine.reminder_times,
+              ];
 
-            times[
-              timeIndex
-            ] = value;
+              times[
+                timeIndex
+              ] = value;
 
-            return {
-              ...medicine,
-              reminder_times:
-                times,
-            };
-          },
-        ),
-    );
-  };
+              return {
+                ...medicine,
+                reminder_times:
+                  times,
+              };
+            },
+          ),
+      );
+    };
 
 
   const addReminderTime = (
     medicineIndex: number,
   ) => {
     setMedicines(
-      current =>
+      (current) =>
         current.map(
           (
             medicine,
@@ -569,7 +682,7 @@ function PrescriptionOcrPage() {
     timeIndex: number,
   ) => {
     setMedicines(
-      current =>
+      (current) =>
         current.map(
           (
             medicine,
@@ -607,234 +720,288 @@ function PrescriptionOcrPage() {
   };
 
 
-  const saveAll = async () => {
-    if (medicines.length === 0) {
-      toast.error(
-        "No extracted medicines to save.",
-      );
-      return;
-    }
-
-    for (
-      const medicine of medicines
-    ) {
-      const name =
-        medicine.medicine_name.trim();
-
-      const dosage =
-        medicine.dosage.trim();
-
-      const frequency =
-        medicine.frequency.trim();
-
-      const quantity =
-        Number(
-          medicine.quantity,
-        );
-
-      const lowStock =
-        Number(
-          medicine.low_stock_threshold,
-        );
-
-      const times =
-        medicine.reminder_times;
-
+  const saveAll =
+    async () => {
       if (
-        !name ||
-        !dosage ||
-        !frequency
+        medicines.length === 0
       ) {
         toast.error(
-          "Please complete medicine name, dosage and frequency for every medicine.",
+          "No extracted medicines to save.",
         );
         return;
       }
 
-      if (times.length === 0) {
-        toast.error(
-          `Add at least one reminder time for ${name}.`,
-        );
-        return;
-      }
-
-      const invalidTime =
-        times.some(
-          time =>
-            !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(
-              time,
-            ),
-        );
-
-      if (invalidTime) {
-        toast.error(
-          `Please enter valid HH:MM reminder times for ${name}.`,
-        );
-        return;
-      }
-
-      if (
-        times.length >
-        new Set(times).size
-      ) {
-        toast.error(
-          `Reminder times for ${name} must be unique.`,
-        );
-        return;
-      }
-
-      if (
-        !Number.isFinite(
-          quantity,
-        ) ||
-        quantity < 1
-      ) {
-        toast.error(
-          `Enter a valid quantity for ${name}.`,
-        );
-        return;
-      }
-
-      if (
-        !Number.isFinite(
-          lowStock,
-        ) ||
-        lowStock < 1 ||
-        lowStock >= quantity
-      ) {
-        toast.error(
-          `Low Stock Alert for ${name} must be at least 1 and lower than the quantity.`,
-        );
-        return;
-      }
-
-      if (
-        !medicine.start_date ||
-        !medicine.end_date
-      ) {
-        toast.error(
-          `Start and end dates are required for ${name}.`,
-        );
-        return;
-      }
-    }
-
-
-    try {
-      setSaving(true);
-
-      const payload: SaveOcrMedicine[] =
+      const preparedMedicines =
         medicines.map(
-          medicine => ({
-            medicine_name:
-              medicine.medicine_name.trim(),
+          (medicine) => {
+            const name =
+              medicine.medicine_name.trim();
 
-            dosage:
-              medicine.dosage.trim(),
+            const dosage =
+              medicine.dosage.trim();
 
-            frequency:
-              medicine.frequency.trim(),
+            const frequency =
+              medicine.frequency.trim() ||
+              "Once daily";
 
-            duration:
-              medicine.duration.trim() ||
-              "",
+            const times =
+              medicine.reminder_times
+                .map((time) =>
+                  time.trim(),
+                )
+                .filter(Boolean);
 
-            reminder_time:
-              medicine.reminder_times.join(
-                ",",
-              ),
-
-            reminder_times:
-              [...medicine.reminder_times],
-
-            quantity:
+            const quantity =
               Number(
                 medicine.quantity,
-              ),
+              );
 
-            start_date:
-              medicine.start_date,
-
-            end_date:
-              medicine.end_date,
-
-            instructions:
-              (medicine.instructions ?? "")
-                .trim(),
-
-            total_quantity:
-              Number(
-                medicine.quantity,
-              ),
-
-            remaining_quantity:
-              Number(
-                medicine.quantity,
-              ),
-
-            tablets_per_day:
-              medicine.reminder_times.length,
-
-            low_stock_threshold:
+            const lowStock =
               Number(
                 medicine.low_stock_threshold,
-              ),
-          }),
+              );
+
+            return {
+              medicine,
+              name,
+              dosage,
+              frequency,
+              times,
+              quantity,
+              lowStock,
+            };
+          },
         );
 
-      /*
-       * IMPORTANT FIX:
-       * Call the API function saveOcrMedicines().
-       * Do NOT call setMedicines(payload) here.
-       */
-      const response =
-        await saveOcrMedicines(
-          payload,
-        );
 
-      toast.success(
-        `${response.saved_count} medicine${
-          response.saved_count === 1
-            ? ""
-            : "s"
-        } saved successfully.`,
-      );
-
-      if (
-        response.skipped_count >
-        0
+      for (
+        const item of
+        preparedMedicines
       ) {
-        toast.info(
-          `${response.skipped_count} duplicate medicine${
-            response.skipped_count === 1
-              ? ""
-              : "s"
-          } skipped.`,
-        );
+        if (
+          item.name.length < 2
+        ) {
+          toast.error(
+            "Every medicine must have a valid name.",
+          );
+          return;
+        }
+
+        if (
+          !item.dosage
+        ) {
+          toast.error(
+            `Enter dosage for ${item.name}.`,
+          );
+          return;
+        }
+
+        if (
+          !item.times.length
+        ) {
+          toast.error(
+            `Add at least one reminder time for ${item.name}.`,
+          );
+          return;
+        }
+
+        const invalidTime =
+          item.times.some(
+            (time) =>
+              !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(
+                time,
+              ),
+          );
+
+        if (invalidTime) {
+          toast.error(
+            `Invalid reminder time for ${item.name}.`,
+          );
+          return;
+        }
+
+        if (
+          item.times.length >
+          3
+        ) {
+          toast.error(
+            `A maximum of 3 reminder times is allowed for ${item.name}.`,
+          );
+          return;
+        }
+
+        if (
+          item.times.length !==
+          new Set(
+            item.times,
+          ).size
+        ) {
+          toast.error(
+            `Reminder times for ${item.name} must be unique.`,
+          );
+          return;
+        }
+
+        if (
+          !Number.isFinite(
+            item.quantity,
+          ) ||
+          item.quantity < 1
+        ) {
+          toast.error(
+            `Enter a valid quantity for ${item.name}.`,
+          );
+          return;
+        }
+
+        if (
+          !Number.isFinite(
+            item.lowStock,
+          ) ||
+          item.lowStock < 1 ||
+          item.lowStock >=
+            item.quantity
+        ) {
+          toast.error(
+            `Low Stock Alert for ${item.name} must be lower than the quantity.`,
+          );
+          return;
+        }
+
+        if (
+          !item.medicine.start_date ||
+          !item.medicine.end_date
+        ) {
+          toast.error(
+            `Start and end dates are required for ${item.name}.`,
+          );
+          return;
+        }
       }
 
-      setMedicines([]);
 
-      setResult(
-        EMPTY_RESULT,
-      );
+      try {
+        setSaving(true);
 
-    } catch (error) {
-      console.error(
-        "Save OCR medicines error:",
-        error,
-      );
+        const payload =
+          preparedMedicines.map(
+            (item) => ({
+              medicine_name:
+                item.name,
 
-      toast.error(
-        getErrorMessage(
+              dosage:
+                item.dosage,
+
+              frequency:
+                item.frequency,
+
+              reminder_time:
+                item.times.join(","),
+
+              reminder_times:
+                item.times,
+
+              duration:
+                item.medicine
+                  .duration
+                  .trim(),
+
+              quantity:
+                item.quantity,
+
+              total_quantity:
+                item.quantity,
+
+              remaining_quantity:
+                item.quantity,
+
+              tablets_per_day:
+                item.times.length,
+
+              low_stock_threshold:
+                item.lowStock,
+
+              start_date:
+                item.medicine
+                  .start_date,
+
+              end_date:
+                item.medicine
+                  .end_date,
+
+              instructions:
+                item.medicine
+                  .instructions
+                  .trim() ||
+                null,
+            }),
+          );
+
+        /*
+         * IMPORTANT:
+         * Use the production backend endpoint directly.
+         *
+         * POST /ocr/save-prescription
+         */
+        const response =
+          await api.post(
+            "/ocr/save-prescription",
+            {
+              medicines:
+                payload,
+            },
+            {
+              timeout: 120000,
+            },
+          );
+
+        const data =
+          response.data;
+
+        toast.success(
+          `${data.saved_count ?? payload.length} medicine${
+            (data.saved_count ?? payload.length) ===
+            1
+              ? ""
+              : "s"
+          } saved successfully.`,
+        );
+
+        if (
+          Number(
+            data.skipped_count ?? 0,
+          ) > 0
+        ) {
+          toast.info(
+            `${data.skipped_count} duplicate medicine${
+              data.skipped_count === 1
+                ? ""
+                : "s"
+            } skipped.`,
+          );
+        }
+
+        setMedicines([]);
+
+        setResult(
+          EMPTY_RESULT,
+        );
+
+      } catch (error) {
+        console.error(
+          "Save OCR medicines error:",
           error,
-        ),
-      );
+        );
 
-    } finally {
-      setSaving(false);
-    }
-  };
+        toast.error(
+          getErrorMessage(
+            error,
+          ),
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
 
 
   const clearScan = () => {
@@ -866,45 +1033,44 @@ function PrescriptionOcrPage() {
         description="Scan a prescription, review every detected medicine, edit missing details, and save all medicines together."
       />
 
-
       <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
 
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff"
+          accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff"
           hidden
           onChange={
             handleFileChange
           }
         />
 
-
         <div className="rounded-2xl border-2 border-dashed border-border p-8 text-center">
 
           <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary-soft text-primary">
+
             {scanning ? (
               <Loader2 className="size-7 animate-spin" />
             ) : (
               <FileScan className="size-7" />
             )}
-          </div>
 
+          </div>
 
           <h3 className="mt-4 text-lg font-bold">
             Scan prescription
           </h3>
 
-
           <p className="mt-2 text-sm text-muted-foreground">
             Upload a clear prescription image. All detected medicines will appear below.
           </p>
 
-
           <Button
             type="button"
             className="mt-5 rounded-full"
-            disabled={scanning}
+            disabled={
+              scanning
+            }
             onClick={() =>
               inputRef.current?.click()
             }
@@ -917,7 +1083,6 @@ function PrescriptionOcrPage() {
           </Button>
 
         </div>
-
       </Card>
 
 
@@ -936,7 +1101,6 @@ function PrescriptionOcrPage() {
               </p>
             </div>
 
-
             <Button
               type="button"
               variant="outline"
@@ -949,7 +1113,6 @@ function PrescriptionOcrPage() {
             </Button>
 
           </div>
-
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-border/70 bg-black/20">
 
@@ -1000,7 +1163,8 @@ function PrescriptionOcrPage() {
                   <div className="mb-4 flex items-center justify-between">
 
                     <p className="font-bold">
-                      Medicine {index + 1}
+                      Medicine{" "}
+                      {index + 1}
                     </p>
 
                     <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
@@ -1021,11 +1185,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.medicine_name
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "medicine_name",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                       />
@@ -1041,11 +1208,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.dosage
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "dosage",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                       />
@@ -1061,11 +1231,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.frequency
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "frequency",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                       />
@@ -1081,7 +1254,16 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.duration
                         }
-                        readOnly
+                        onChange={(
+                          event,
+                        ) =>
+                          updateMedicine(
+                            index,
+                            "duration",
+                            event.target
+                              .value,
+                          )
+                        }
                       />
                     </div>
 
@@ -1101,7 +1283,10 @@ function PrescriptionOcrPage() {
                         size="sm"
                         variant="outline"
                         disabled={
-                          medicine.reminder_times.length >= 3
+                          medicine
+                            .reminder_times
+                            .length >=
+                          3
                         }
                         onClick={() =>
                           addReminderTime(
@@ -1129,16 +1314,16 @@ function PrescriptionOcrPage() {
 
                             <Input
                               type="time"
-                              value={
-                                time
-                              }
-                              onChange={
-                                event =>
-                                  updateReminderTime(
-                                    index,
-                                    timeIndex,
-                                    event.target.value,
-                                  )
+                              value={time}
+                              onChange={(
+                                event,
+                              ) =>
+                                updateReminderTime(
+                                  index,
+                                  timeIndex,
+                                  event.target
+                                    .value,
+                                )
                               }
                             />
 
@@ -1147,7 +1332,9 @@ function PrescriptionOcrPage() {
                               variant="ghost"
                               size="icon"
                               disabled={
-                                medicine.reminder_times.length <=
+                                medicine
+                                  .reminder_times
+                                  .length <=
                                 1
                               }
                               onClick={() =>
@@ -1167,7 +1354,7 @@ function PrescriptionOcrPage() {
                     </div>
 
                     <p className="text-xs text-muted-foreground">
-                      When the prescription gives a schedule such as 1-0-1 instead of exact clock times, the app uses editable default times.
+                      If the prescription gives a schedule instead of exact clock times, review and adjust the suggested times.
                     </p>
 
                   </div>
@@ -1185,11 +1372,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.start_date
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "start_date",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                       />
@@ -1206,11 +1396,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.end_date
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "end_date",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                       />
@@ -1228,11 +1421,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.quantity
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "quantity",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                       />
@@ -1254,11 +1450,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.low_stock_threshold
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "low_stock_threshold",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                       />
@@ -1274,11 +1473,14 @@ function PrescriptionOcrPage() {
                         value={
                           medicine.instructions
                         }
-                        onChange={event =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateMedicine(
                             index,
                             "instructions",
-                            event.target.value,
+                            event.target
+                              .value,
                           )
                         }
                         placeholder="Instructions from prescription"
@@ -1328,7 +1530,8 @@ function PrescriptionOcrPage() {
 
       {file &&
         !scanning &&
-        medicines.length === 0 && (
+        medicines.length ===
+          0 && (
           <Card className="rounded-2xl border-warning/30 bg-warning/5 p-5">
 
             <p className="font-semibold">
@@ -1336,7 +1539,7 @@ function PrescriptionOcrPage() {
             </p>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              Please use a closer, sharper image with the medicine names and dosage clearly visible.
+              Please use a clearer prescription image with medicine names and dosage visible.
             </p>
 
           </Card>

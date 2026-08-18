@@ -6,10 +6,10 @@ This file keeps the existing public functions used by the application,
 but makes Gemini calls more reliable and keeps assistant responses clean.
 
 Primary model:
-    gemini-flash-latest
+    gemini-3.6-flash
 
 Fallback model:
-    gemini-flash-latest-2
+    gemini-3.5-flash-lite
 
 Both are stable Gemini API model IDs. The assistant uses the logged-in
 patient's medication records supplied by the route.
@@ -37,8 +37,8 @@ client = genai.Client(
 )
 
 
-GENERAL_MODEL = "gemini-flash-latest"
-FAST_MODEL = "gemini-flash-latest-2"
+GENERAL_MODEL = "gemini-3.6-flash"
+FAST_MODEL = "gemini-3.5-flash-lite"
 
 
 def _clean_ai_text(value: Any) -> str:
