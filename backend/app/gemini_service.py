@@ -7,7 +7,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 def ask_gemini(prompt: str):
 
     response = client.models.generate_content(
-        model="gemini-flash-latest",
+        model="gemini-3.6-flash",
         contents=prompt
     )
 

@@ -23,6 +23,7 @@ export interface Medicine {
 }
 
 export interface Notification {
+  description: string;
   id: number;
   title: string;
   message: string;

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PortalLayout } from "@/components/portal/portal-layout";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
+
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [

@@ -1,14 +1,14 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from datetime import date, timedelta
-from app.routes import ocr, assistant, refill
-from datetime import datetime
+from datetime import date, timedelta, datetime, timezone
+from app.routers import ocr, assistant, refill
 from .import crud
 from app.ai_service import ask_ai
 from app.schemas import AssistantRequest
-from .database import Base, engine, get_db
-from .models import User
+from .models import User, PasswordResetCode
+from app.database import engine, Base
+from app import models
 from .schemas import (
     UserRegister,
     UserLogin,
@@ -17,26 +17,40 @@ from .schemas import (
     MedicineCreate,
     MedicineUpdate,
     MedicineResponse,
-    ReminderHistoryResponse
-    ,
-    GoogleLogin
+    ReminderHistoryResponse,
+    GoogleLogin,
+    ForgotPasswordRequest,
+    VerifyResetCodeRequest,
+    ResetPasswordRequest,
 )
+import hashlib
+import secrets
+import re
 from app.google_auth import verify_google_token
-from app.routes import calendar
-from app.routes import reminder
-from app.routes import notifications
-from app.routes import analytics
+from app.routers import users
+from app.routers import calendar
+from app.routers import reminder
+from app.routers import notifications
+from app.routers import analytics
 from .auth import (
     hash_password,
     verify_password,
     create_access_token,
     get_current_user
 )
-from .email_service import send_email
+from .email_service import (
+    send_email,
+    send_verification_code_email,
+    send_password_reset_success_email,
+)
 from app.sms_service import send_sms
 from .models import Medicine, ReminderHistory
 from . import scheduler
 from .schemas import MedicineCreate, MedicineResponse
+from .schemas import (
+    MedicineNameValidationRequest,
+    MedicineNameValidationResponse,
+)
 from .auth import get_current_user
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -51,15 +65,18 @@ from app.auth import create_access_token
 
 from app.models import User
 
-from app.routes import ocr
+from app.routers import ocr
 
 from app.database import get_db
-
 from sqlalchemy.orm import Session
-
 from fastapi import Depends
-
-from app.ai_service import ask_ai
+from app.ai_service import (
+    ask_ai,
+    validate_medicine_name as ai_validate_medicine_name,
+)
+from app import users
+from app import caregiver
+from app import admin
 from .schemas import ChatRequest
 
 app = FastAPI(
@@ -74,27 +91,68 @@ app.include_router(refill.router)
 app.include_router(calendar.router)
 app.include_router(notifications.router)
 app.include_router(analytics.router)
-app.include_router(ocr.router)
 app.include_router(reminder.router)
+
+app.include_router(users.router)
+app.include_router(caregiver.router)
+app.include_router(admin.router)
+
+def hash_reset_code(code: str) -> str:
+    return hashlib.sha256(
+        code.encode("utf-8")
+    ).hexdigest()
+
+
+def validate_new_password(password: str):
+
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least 8 characters"
+        )
+
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one uppercase letter"
+        )
+
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one lowercase letter"
+        )
+
+    if not re.search(r"\d", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one number"
+        )
+
+    if not re.search(r"[^\w\s]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one special character"
+        )
+
+    
 
 @app.on_event("startup")
 def startup_event():
     scheduler.start_scheduler()
+    Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
+        "https://mlr-pravallika-health-wise-ai-80.pravallikamarri55.workers.dev",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-Base.metadata.create_all(bind=engine)
 
 security = HTTPBearer()
 
@@ -212,6 +270,97 @@ def get_profile(
     }
 
 
+@app.put(
+    "/profile/{user_id}",
+    response_model=UserResponse,
+    tags=["Profile"],
+)
+def update_profile(
+    user_id: int,
+    profile: ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update the currently authenticated user's profile.
+
+    The frontend may send the logged-in user's id in the URL, but the
+    authenticated user is always used as the source of truth.
+    This prevents one patient from modifying another patient's profile.
+    """
+
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can update only your own profile.",
+        )
+
+    try:
+        db_user = (
+            db.query(User)
+            .filter(
+                User.id == current_user.id,
+            )
+            .first()
+        )
+
+        if db_user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Profile not found.",
+            )
+
+        # Required field
+        db_user.name = profile.name.strip()
+
+        # Optional fields
+        db_user.phone = (
+            profile.phone.strip()
+            if profile.phone is not None
+            else ""
+        )
+
+        db_user.dob = profile.dob or ""
+        db_user.gender = profile.gender or ""
+        db_user.blood_group = profile.blood_group or ""
+        db_user.height = profile.height or ""
+        db_user.weight = profile.weight or ""
+        db_user.allergies = profile.allergies or ""
+        db_user.medical_conditions = (
+            profile.medical_conditions or ""
+        )
+        db_user.preferred_language = (
+            profile.preferred_language or "English"
+        )
+        db_user.address = profile.address or ""
+
+        db.commit()
+        db.refresh(db_user)
+
+        print(
+            "Profile updated successfully:",
+            db_user.id,
+        )
+
+        return db_user
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        print("=" * 60)
+        print("PROFILE UPDATE ERROR")
+        print(repr(exc))
+        print("=" * 60)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to update profile.",
+        ) from exc
+
+
 @app.get("/dashboard", tags=["Dashboard"])
 def dashboard(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
@@ -220,96 +369,282 @@ def dashboard(credentials: HTTPAuthorizationCredentials = Depends(security)):
         "token_received": token
     }
 
-
-@app.put(
-    "/profile/{user_id}",
-    response_model=UserResponse,
-    tags=["Profile"]
+@app.post(
+    "/medicines/validate-name",
+    tags=["Medicine"],
 )
-def update_profile(
-    user_id: int,
-    profile: ProfileUpdate,
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+def validate_medicine_name(
+    request: MedicineNameValidationRequest,
+    current_user: User = Depends(get_current_user),
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    """
+    Validate a medicine name from the frontend.
 
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
+    The frontend sends:
+        {"medicine_name": "Paracetamol"}
+
+    This endpoint delegates validation to ai_service.py.
+    """
+    medicine_name = request.medicine_name.strip()
+
+    if not medicine_name:
+        return MedicineNameValidationResponse(
+            valid=False,
+            medicine_name="",
+            message="Medicine name is required.",
         )
 
-    # Optional but important: prevent one logged-in user
-    # from editing another user's profile.
-    # We will connect this properly after decoding JWT.
-    
-    if profile.name is not None:
-        user.name = profile.name
+    try:
+        validation = ai_validate_medicine_name(
+            medicine_name
+        )
 
-    if profile.phone is not None:
-        user.phone = profile.phone
+        if isinstance(validation, dict):
+            return {
+                "valid": bool(
+                    validation.get("valid", False)
+                ),
+                "medicine_name": validation.get(
+                    "medicine_name",
+                    medicine_name,
+                ),
+                "message": validation.get(
+                    "message",
+                    "Medicine validation completed.",
+                ),
+                "suggestion": validation.get(
+                    "suggestion"
+                ),
+                **(
+                    {
+                        "available":
+                            validation.get(
+                                "available",
+                                True,
+                            )
+                    }
+                ),
+            }
 
-    if profile.dob is not None:
-        user.dob = profile.dob
+        return {
+            "valid": False,
+            "available": False,
+            "medicine_name": medicine_name,
+            "message": (
+                "Medicine verification is temporarily unavailable. "
+                "Please try again."
+            ),
+            "suggestion": None,
+        }
 
-    if profile.gender is not None:
-        user.gender = profile.gender
+    except Exception as exc:
+        print(
+            "Medicine validation error:",
+            repr(exc),
+        )
 
-    if profile.blood_group is not None:
-        user.blood_group = profile.blood_group
+        return {
+            "valid": False,
+            "available": False,
+            "medicine_name": medicine_name,
+            "message": (
+                "Medicine verification is temporarily unavailable. "
+                "Please try again."
+            ),
+            "suggestion": None,
+        }
 
-    if profile.height is not None:
-        user.height = profile.height
-
-    if profile.weight is not None:
-        user.weight = profile.weight
-
-    if profile.allergies is not None:
-        user.allergies = profile.allergies
-
-    if profile.medical_conditions is not None:
-        user.medical_conditions = profile.medical_conditions
-
-    if profile.preferred_language is not None:
-        user.preferred_language = profile.preferred_language
-
-    if profile.address is not None:
-        user.address = profile.address    
-
-    db.commit()
-    db.refresh(user)
-
-    return user
 
 @app.post(
     "/medicines",
     response_model=MedicineResponse,
-    tags=["Medicine"]
+    tags=["Medicine"],
 )
-
 def add_medicine(
     medicine: MedicineCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
+    """
+    Create a medicine for the logged-in patient.
 
-    new_medicine = Medicine(
-        medicine_name=medicine.medicine_name,
-        dosage=medicine.dosage,
-        frequency=medicine.frequency,
-        reminder_time=medicine.reminder_time,
-        start_date=medicine.start_date,
-        end_date=medicine.end_date,
-        instructions=medicine.instructions,
-        user_id=current_user.id
-    )
+    Includes:
+    - AI validation
+    - duplicate prevention
+    - multiple reminder times
+    - quantity tracking
+    - low-stock threshold
+    """
+    try:
+        medicine_name = medicine.medicine_name.strip()
 
-    db.add(new_medicine)
-    db.commit()
-    db.refresh(new_medicine)
+        # --------------------------------------------------
+        # AI MEDICINE VALIDATION
+        # --------------------------------------------------
+        validation = ai_validate_medicine_name(
+            medicine_name
+        )
 
-    return new_medicine
+        if not isinstance(validation, dict):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Medicine verification is temporarily unavailable."
+                ),
+            )
+
+        if validation.get("available") is False:
+            raise HTTPException(
+                status_code=503,
+                detail=validation.get(
+                    "message",
+                    "Medicine verification is temporarily unavailable.",
+                ),
+            )
+
+        if not validation.get("valid", False):
+            raise HTTPException(
+                status_code=400,
+                detail=validation.get(
+                    "message",
+                    "The entered name was not recognized as a medicine.",
+                ),
+            )
+
+        # --------------------------------------------------
+        # DUPLICATE CHECK
+        #
+        # Same patient + same medicine name is treated as
+        # an existing medicine. The patient can edit the
+        # existing record rather than creating duplicates.
+        # --------------------------------------------------
+        existing = (
+            db.query(Medicine)
+            .filter(
+                Medicine.user_id == current_user.id,
+                Medicine.medicine_name.ilike(
+                    medicine_name
+                ),
+            )
+            .first()
+        )
+
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{existing.medicine_name} "
+                    "is already registered in your account."
+                ),
+            )
+
+        # --------------------------------------------------
+        # VALIDATE QUANTITY / LOW STOCK VALUES
+        # --------------------------------------------------
+        if medicine.total_quantity <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Quantity must be greater than zero.",
+            )
+
+        if medicine.remaining_quantity < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Remaining quantity cannot be negative.",
+            )
+
+        if medicine.remaining_quantity > medicine.total_quantity:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Remaining quantity cannot be greater "
+                    "than total quantity."
+                ),
+            )
+
+        low_stock_threshold = (
+            medicine.low_stock_threshold
+            if medicine.low_stock_threshold is not None
+            else 5
+        )
+
+        if low_stock_threshold < 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Low Stock Alert must be at least 1 tablet."
+                ),
+            )
+
+        if low_stock_threshold >= medicine.total_quantity:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Low Stock Alert must be lower "
+                    "than the starting quantity."
+                ),
+            )
+
+        # --------------------------------------------------
+        # CREATE MEDICINE
+        # --------------------------------------------------
+        new_medicine = Medicine(
+            user_id=current_user.id,
+
+            medicine_name=medicine_name,
+
+            dosage=medicine.dosage.strip(),
+
+            frequency=medicine.frequency.strip(),
+
+            reminder_time=medicine.reminder_time.strip(),
+
+            start_date=medicine.start_date,
+
+            end_date=medicine.end_date,
+
+            instructions=medicine.instructions,
+
+            total_quantity=medicine.total_quantity,
+
+            remaining_quantity=medicine.remaining_quantity,
+
+            tablets_per_day=medicine.tablets_per_day,
+
+            low_stock_threshold=low_stock_threshold,
+
+            is_active=True,
+        )
+
+        db.add(new_medicine)
+        db.commit()
+        db.refresh(new_medicine)
+
+        print(
+            "✅ Medicine saved:",
+            new_medicine.medicine_name,
+            "ID:",
+            new_medicine.id,
+        )
+
+        return new_medicine
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        print("=" * 60)
+        print("🔥 ADD MEDICINE ERROR")
+        print(repr(exc))
+        print("=" * 60)
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
 
 @app.get(
     "/medicines",
@@ -352,42 +687,161 @@ def get_medicine(
 @app.put(
     "/medicines/{medicine_id}",
     response_model=MedicineResponse,
-    tags=["Medicine"]
+    tags=["Medicine"],
 )
 def update_medicine(
     medicine_id: int,
     medicine: MedicineUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    db_medicine = (
-        db.query(Medicine)
-        .filter(
-            Medicine.id == medicine_id,
-            Medicine.user_id == current_user.id
+    try:
+        db_medicine = (
+            db.query(Medicine)
+            .filter(
+                Medicine.id == medicine_id,
+                Medicine.user_id == current_user.id,
+            )
+            .first()
         )
-        .first()
-    )
 
-    if not db_medicine:
+        if db_medicine is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Medicine not found.",
+            )
+
+        incoming_name = medicine.medicine_name.strip()
+        existing_name = (
+            db_medicine.medicine_name or ""
+        ).strip()
+
+        # Do not call Gemini again when editing the existing
+        # medicine without changing its name.
+        if incoming_name.lower() != existing_name.lower():
+            validation = ai_validate_medicine_name(
+                incoming_name
+            )
+
+            if not isinstance(validation, dict):
+                raise HTTPException(
+                    status_code=503,
+                    detail="Medicine verification is temporarily unavailable.",
+                )
+
+            if validation.get("available") is False:
+                raise HTTPException(
+                    status_code=503,
+                    detail=validation.get(
+                        "message",
+                        "Medicine verification is temporarily unavailable.",
+                    ),
+                )
+
+            if not validation.get("valid", False):
+                raise HTTPException(
+                    status_code=400,
+                    detail=validation.get(
+                        "message",
+                        "The entered name was not recognized as a medicine.",
+                    ),
+                )
+
+        # Prevent accidental duplicates for this patient.
+        duplicate = (
+            db.query(Medicine)
+            .filter(
+                Medicine.user_id == current_user.id,
+                Medicine.id != medicine_id,
+                Medicine.medicine_name.ilike(incoming_name),
+            )
+            .first()
+        )
+
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{duplicate.medicine_name} is already registered "
+                    "in your account."
+                ),
+            )
+
+        total_quantity = medicine.total_quantity
+        remaining_quantity = medicine.remaining_quantity
+        low_stock_threshold = medicine.low_stock_threshold
+
+        if total_quantity <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Total quantity must be greater than zero.",
+            )
+
+        if remaining_quantity < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Remaining quantity cannot be negative.",
+            )
+
+        if remaining_quantity > total_quantity:
+            raise HTTPException(
+                status_code=400,
+                detail="Remaining quantity cannot be greater than total quantity.",
+            )
+
+        if low_stock_threshold < 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Low Stock Alert must be at least 1 tablet.",
+            )
+
+        if low_stock_threshold >= total_quantity:
+            raise HTTPException(
+                status_code=400,
+                detail="Low Stock Alert must be lower than the starting quantity.",
+            )
+
+        db_medicine.medicine_name = incoming_name
+        db_medicine.dosage = medicine.dosage.strip()
+        db_medicine.frequency = medicine.frequency.strip()
+        db_medicine.reminder_time = medicine.reminder_time.strip()
+        db_medicine.start_date = medicine.start_date
+        db_medicine.end_date = medicine.end_date
+        db_medicine.instructions = medicine.instructions
+        db_medicine.total_quantity = total_quantity
+        db_medicine.remaining_quantity = remaining_quantity
+        db_medicine.tablets_per_day = medicine.tablets_per_day
+        db_medicine.low_stock_threshold = low_stock_threshold
+        db_medicine.is_active = medicine.is_active
+
+        db.commit()
+        db.refresh(db_medicine)
+
+        print(
+            "✅ Medicine updated:",
+            db_medicine.medicine_name,
+            "ID:",
+            db_medicine.id,
+        )
+
+        return db_medicine
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        print("=" * 60)
+        print("🔥 UPDATE MEDICINE ERROR")
+        print(repr(exc))
+        print("=" * 60)
+
         raise HTTPException(
-            status_code=404,
-            detail="Medicine not found"
+            status_code=500,
+            detail=str(exc),
         )
-    
-    db_medicine.medicine_name = medicine.medicine_name
-    db_medicine.dosage = medicine.dosage
-    db_medicine.frequency = medicine.frequency
-    db_medicine.reminder_time = medicine.reminder_time
-    db_medicine.start_date = medicine.start_date
-    db_medicine.end_date = medicine.end_date
-    db_medicine.instructions = medicine.instructions
-    db_medicine.is_active = medicine.is_active
 
-    db.commit()
-    db.refresh(db_medicine)
-
-    return db_medicine
 
 @app.patch(
     "/medicines/{medicine_id}/toggle",
@@ -493,25 +947,21 @@ def get_dashboard_stats(
 
         for medicine in medicines:
 
-            frequency = (medicine.frequency or "").lower()
+            if not medicine.is_active:
+                continue
 
-            if "1-0-1" in frequency:
-                today_reminders += 2
+            if not medicine.reminder_time:
+                continue
 
-            elif "1-1-1" in frequency:
-                today_reminders += 3
+            reminder_times = [
+                time.strip()
+                for time in medicine.reminder_time.split(",")
+                if time.strip()
+            ]
 
-            elif "0-0-1" in frequency:
-                today_reminders += 1
-
-            elif "twice" in frequency:
-                today_reminders += 2
-
-            elif "three" in frequency:
-                today_reminders += 3
-
-            else:
-                today_reminders += 1
+            today_reminders += len(
+                reminder_times
+            )
 
         expiring_soon = 0
 
@@ -817,4 +1267,258 @@ def google_login(
 
         "token_type": "bearer"
 
+    }
+
+@app.post(
+    "/auth/forgot-password",
+    tags=["Authentication"]
+)
+def forgot_password(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+
+    user = (
+        db.query(User)
+        .filter(
+            User.email == request.email
+        )
+        .first()
+    )
+
+    generic_response = {
+        "message": (
+            "If an account exists for this email, "
+            "a verification code has been sent."
+        )
+    }
+
+    if user is None:
+        return generic_response
+
+    now = datetime.now(timezone.utc)
+
+    recent_request = (
+        db.query(PasswordResetCode)
+        .filter(
+            PasswordResetCode.user_id == user.id,
+            PasswordResetCode.created_at >= (
+                now - timedelta(seconds=60)
+            ),
+            PasswordResetCode.used == False
+        )
+        .first()
+    )
+
+    if recent_request:
+        return generic_response
+
+    # Invalidate older reset codes
+    (
+        db.query(PasswordResetCode)
+        .filter(
+            PasswordResetCode.user_id == user.id,
+            PasswordResetCode.used == False
+        )
+        .update({
+            PasswordResetCode.used: True
+        })
+    )
+
+    verification_code = str(
+        secrets.randbelow(1_000_000)
+    ).zfill(6)
+
+    code_hash = hash_reset_code(
+        verification_code
+    )
+
+    reset_record = PasswordResetCode(
+        user_id=user.id,
+        code_hash=code_hash,
+        expires_at=now + timedelta(minutes=10),
+        attempts=0,
+        used=False,
+    )
+
+    db.add(reset_record)
+    db.commit()
+
+    send_verification_code_email(
+        receiver_email=user.email,
+        verification_code=verification_code
+    )
+
+    return generic_response
+
+@app.post(
+    "/auth/verify-reset-code",
+    tags=["Authentication"]
+)
+def verify_reset_code(
+    request: VerifyResetCodeRequest,
+    db: Session = Depends(get_db)
+):
+
+    user = (
+        db.query(User)
+        .filter(
+            User.email == request.email
+        )
+        .first()
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired verification code"
+        )
+
+    reset_record = (
+        db.query(PasswordResetCode)
+        .filter(
+            PasswordResetCode.user_id == user.id,
+            PasswordResetCode.used == False
+        )
+        .order_by(
+            PasswordResetCode.id.desc()
+        )
+        .first()
+    )
+
+    if reset_record is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired verification code"
+        )
+
+    now = datetime.now(timezone.utc)
+
+    if reset_record.expires_at < now:
+        reset_record.used = True
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Verification code has expired"
+        )
+
+    if reset_record.attempts >= 5:
+        reset_record.used = True
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Too many verification attempts"
+        )
+
+    if hash_reset_code(request.code) != reset_record.code_hash:
+
+        reset_record.attempts += 1
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification code"
+        )
+
+    reset_record.verified = True
+
+    db.commit()
+
+    return {
+        "verified": True,
+        "message": "Verification code is valid"
+    }
+
+@app.post(
+    "/auth/reset-password",
+    tags=["Authentication"]
+)
+def reset_password(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+
+    validate_new_password(
+        request.new_password
+    )
+
+    user = (
+        db.query(User)
+        .filter(
+            User.email == request.email
+        )
+        .first()
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired verification code"
+        )
+
+    reset_record = (
+        db.query(PasswordResetCode)
+        .filter(
+            PasswordResetCode.user_id == user.id,
+            PasswordResetCode.used == False,
+            PasswordResetCode.verified == True
+        )
+        .order_by(
+            PasswordResetCode.id.desc()
+        )
+        .first()
+    )
+
+    if reset_record is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Please verify your email code first"
+        )
+
+    now = datetime.now(timezone.utc)
+
+    if reset_record.expires_at < now:
+
+        reset_record.used = True
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Verification code has expired"
+        )
+
+    if hash_reset_code(request.code) != reset_record.code_hash:
+
+        reset_record.attempts += 1
+
+        if reset_record.attempts >= 5:
+            reset_record.used = True
+
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification code"
+        )
+
+    user.password_hash = hash_password(
+        request.new_password
+    )
+
+    reset_record.used = True
+    reset_record.verified = False
+
+    db.commit()
+
+    send_password_reset_success_email(
+        receiver_email=user.email
+    )
+
+    return {
+        "message": (
+            "Password reset successfully. "
+            "Please login with your new password."
+        )
     }

@@ -2,9 +2,11 @@
 
 <div align="center">
 
-### Intelligent Medication Reminder Platform
+## Intelligent Medicine Reminder and Medication Management Platform
 
-An AI-powered healthcare platform that helps patients manage medicines, receive reminders, scan prescriptions using OCR, and improve medication adherence through intelligent notifications.
+MediCare AI is an AI-assisted medication management platform designed to help patients organize medicines, configure reminders, monitor adherence, manage refills, and interact with medication-related AI services.
+
+The platform provides dedicated experiences for Patients, Caregivers, and Administrators, with a production-oriented backend, database, analytics, OCR-based prescription processing, and cloud deployment.
 
 <img src="https://img.shields.io/badge/React-19-blue?logo=react">
 <img src="https://img.shields.io/badge/FastAPI-Backend-green?logo=fastapi">
@@ -43,149 +45,132 @@ The platform enables users to:
 
 # Features
 
-## Authentication
+## Milestone 4
 
-- Secure Login
-  
-- JWT Authentication
-  
-- Role Based Access
-  
-- Patient Portal
+Milestone 4 focuses on:
 
----
+- Analytics and medication insights
 
-## Dashboard
+- Refill and adherence tracking
 
-- Patient Dashboard
-  
-- Live Medicine Statistics
-  
-- Active Medicines
-  
-- Reminder Timeline
-  
-- Today's Medicines
-  
-- Low Stock Monitoring
-  
-- Refill Forecast
+- Prescription OCR integration
+
+- AI-assisted medication workflows
+
+- Patient, Caregiver, and Administrator portals
+
+- Testing and validation
+
+- Production deployment
+
+- End-to-end medication management workflow
 
 ---
 
-## Medicine Management
+## Key Features
 
-- Add Medicines
-  
-- Edit Medicines
-  
-- Delete Medicines
-  
-- Multiple Daily Reminders
-  
-- Dosage Tracking
-  
-- Medicine Instructions
+### Patient Portal
 
----
+- Patient dashboard
 
-## AI Prescription OCR
+- Medicine management
 
-- Upload Prescription
-  
-- Camera Support
-  
-- OCR Text Extraction
-  
-- AI Field Extraction
-  
-- Automatic Medicine Detection
+- Add and edit medicines
 
-Powered by:
+- Dosage and medication scheduling
 
-- EasyOCR
-  
-- Gemini AI
+- Multiple reminder times
 
----
+- Medication quantity tracking
 
-## Notifications
+- Low-stock alerts
 
-### Email Notifications
+- Reminder center
 
-Professional HTML Email Templates
+- Taken, missed, and skipped medication tracking
 
-Includes
+- Medication analytics
 
-- Medicine Name
-  
-- Dosage
-  
-- Reminder Time
-  
-- Dashboard Button
-  
-- Professional Branding
+- Adherence monitoring
 
----
+- Prescription OCR
 
-### SMS Notifications
+- AI medication assistant
 
-Twilio Integration
+- Patient profile management
 
-Patients receive reminder SMS directly on their mobile phone.
+### Prescription OCR
 
----
+- Upload prescription images
 
-### Browser Notifications
+- Extract medicine information from prescriptions
 
-Browser Notification API integrated.
+- Detect multiple medicines
 
-(Production Push Notifications planned for future versions.)
+- Extract dosage and frequency information
 
----
+- Extract reminder information when available
 
-## Reminder History
+- Review extracted information before saving
 
-- Taken
-  
-- Missed
+- Save multiple detected medicines into the patient's medication records
 
-- Snoozed
-  
-- Sent
+### AI Assistant
 
-- Clear History
+- Natural-language medication questions
 
-- Reminder Timeline
+- Medication information assistance
 
----
+- Medication history based responses
 
-## Calendar
+- Adherence-related assistance
 
-Medication Calendar
+- AI-assisted medication workflows
 
-Displays
+### Caregiver Portal
 
-- Scheduled Medicines
+- Patient management
 
-- Reminder Time
+- Patient medication information
 
-- Dosage
+- Medication reports
 
-- Frequency
+- Care-related monitoring
 
----
+- Patient alerts and insights
 
-## Analytics
+### Administrator Portal
 
-- Medicine Usage
+- User management
 
-- Reminder Analytics
+- Administrative dashboard
 
-- Medication Summary
+- Analytics
 
----
+- Audit information
+
+- Notifications
+
+- System management
+
+- Administrative settings
+
+### Analytics
+
+- Medication statistics
+
+- Active medication count
+
+- Daily reminder statistics
+
+- Adherence information
+
+- Completed and missed reminder tracking
+
+- Refill and low-stock insights
+
+- Reporting views for medication activity
+
 
 # Technology Stack
 
@@ -203,15 +188,25 @@ Displays
 
 - Axios
 
+- Vite
+
+- Recharts
+
+- Lucide React
+
 - React Query
 
 ---
 
 ## Backend
 
+- python
+
 - FastAPI
 
 - SQLAlchemy
+
+- pYdantic
 
 - JWT Authentication
 
@@ -221,9 +216,14 @@ Displays
 
 ## AI
 
-- Gemini API
+ Google Gemini
+
+- Gemini Vision
 
 - EasyOCR
+
+- Prescription image processing
+
 
 ---
 
@@ -352,11 +352,72 @@ http://localhost:8080
 
 # For Backend
 
+# Open Another Terminal
+
 venv\Scripts\activate
 
 uvicorn app.main:app --reload
 
+## Production Deployment
+
+# Production API:
+
+https://intelligent-medicine-reminder-platform.onrender.com
+
+# API Documentation:
+
+https://intelligent-medicine-reminder-platform.onrender.com/docs
+
+# Production Frontend:
+
+https://mlr-pravallika-health-wise-ai-80.pravallikamarri55.workers.dev
 ---
+
+## Milestone 4 Outcome
+
+Milestone 4 brings together the major medication-management workflows into a cloud-deployed application, including:
+
+Medication management
+
+Reminder scheduling
+
+Adherence monitoring
+
+Refill and low-stock tracking
+
+Prescription OCR
+
+AI-assisted workflows
+
+Analytics
+
+Patient management
+
+Caregiver workflows
+
+Administrator workflows
+
+Cloud deployment
+
+The project is structured for continued testing, refinement, and future feature improvements.
+
+## Future Enhancements
+
+Improved prescription handwriting recognition
+
+More robust AI fallback handling
+
+Advanced adherence analytics
+
+Medication interaction checking
+
+Push notifications
+
+PWA and mobile installation support
+
+Expanded caregiver collaboration
+
+Additional healthcare integrations
 
 # Developed By
 

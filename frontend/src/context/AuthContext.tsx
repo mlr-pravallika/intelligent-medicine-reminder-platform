@@ -10,16 +10,10 @@ import {
   loginUser,
   registerUser,
   getCurrentUser,
+  type User,
 } from "@/services/authService";
-import { googleLogin } from "@/services/googleAuthService";
 
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-}
+import { googleLogin } from "@/services/googleAuthService";
 
 interface LoginData {
   email: string;
@@ -39,24 +33,35 @@ interface AuthContextType {
   loading: boolean;
   login: (data: LoginData) => Promise<User>;
   loginWithGoogle: (credential: string) => Promise<User>;
-  register: (data: RegisterData) => Promise<void>;
+  register: (data: RegisterData) => Promise<User>;
   logout: () => void;
   isAuthenticated: boolean;
 }
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext =
+  createContext<AuthContextType | null>(null);
 
 interface Props {
   children: ReactNode;
 }
 
-export function AuthProvider({ children }: Props) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({
+  children,
+}: Props) {
+
+  const [user, setUser] =
+    useState<User | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
+
     const loadUser = async () => {
-      const token = localStorage.getItem("access_token");
+
+      const token =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
 
       if (!token) {
         setLoading(false);
@@ -64,71 +69,91 @@ export function AuthProvider({ children }: Props) {
       }
 
       try {
-        const profile = await getCurrentUser();
+
+        const profile =
+          await getCurrentUser();
+
         setUser(profile);
-      } catch (error) {
-        localStorage.removeItem("access_token");
+
+      } catch {
+
+        localStorage.removeItem(
+          "access_token"
+        );
+
+        sessionStorage.removeItem(
+          "access_token"
+        );
+
         setUser(null);
+
       } finally {
+
         setLoading(false);
+
       }
     };
 
     loadUser();
+
   }, []);
 
-  const login = async (data: LoginData) => {
-    try {
-      console.log("Logging in...");
+  const login = async (
+    data: LoginData
+  ) => {
 
-      const response = await loginUser(data);
+    const response =
+      await loginUser(data);
 
-      console.log("Login Response:", response);
+    localStorage.setItem(
+      "access_token",
+      response.access_token
+    );
+
+    const profile =
+      await getCurrentUser();
+
+    setUser(profile);
+
+    return profile;
+  };
+
+  const loginWithGoogle =
+    async (credential: string) => {
+
+      const response =
+        await googleLogin(credential);
 
       localStorage.setItem(
         "access_token",
         response.access_token
       );
 
-      const profile = await getCurrentUser();
-
-      console.log("Profile:", profile);
-
-      setUser(profile);
-
-      return profile;
-    } catch (error) {
-      console.error("LOGIN ERROR:", error);
-      throw error;
-    }
-  };
-
-  const loginWithGoogle = async (credential: string) => {
-    try {
-      const response = await googleLogin(credential);
-
-      localStorage.setItem(
-        "access_token",
-        response.access_token
-      );
-
-      const profile = await getCurrentUser();
+      const profile =
+        await getCurrentUser();
 
       setUser(profile);
 
       return profile;
-    } catch (error) {
-      console.error("GOOGLE LOGIN ERROR:", error);
-      throw error;
-    }
-  };
+    };
 
-  const register = async (data: RegisterData) => {
-    await registerUser(data);
+  const register = async (
+    data: RegisterData
+  ) => {
+
+    return registerUser(data);
   };
 
   const logout = () => {
-    localStorage.removeItem("access_token");
+
+    localStorage.removeItem(
+      "access_token"
+    );
+
+    sessionStorage.removeItem(
+      "access_token"
+    );
+
     setUser(null);
   };
 
@@ -142,11 +167,16 @@ export function AuthProvider({ children }: Props) {
       logout,
       isAuthenticated: !!user,
     }),
-    [user, loading]
+    [
+      user,
+      loading,
+    ]
   );
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={value}
+    >
       {children}
     </AuthContext.Provider>
   );
